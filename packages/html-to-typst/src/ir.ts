@@ -106,6 +106,7 @@ export type Block =
 
 export interface PageSetup {
   paper?: string;
+  flipped?: boolean;
   width?: Length;
   height?: Length;
   margin?: Sides<Length>;

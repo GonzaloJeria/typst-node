@@ -14,6 +14,7 @@ export function emitDocument(doc: Document): string {
       "#" +
         call("set page", {
           paper: p.paper === undefined ? undefined : str(p.paper),
+          flipped: p.flipped ? "true" : undefined,
           width: p.width && length(p.width),
           height: p.height && length(p.height),
           margin: p.margin && sides(p.margin, length),

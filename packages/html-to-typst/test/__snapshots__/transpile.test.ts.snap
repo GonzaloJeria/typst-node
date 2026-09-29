@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`official compiler > matches the invoice snapshot 1`] = `
+"#set page(paper: "a4", margin: (top: 18mm, right: 15mm, bottom: 18mm, left: 15mm))
+#set text(font: ("Libertinus Serif",), size: 10pt, fill: rgb("#222222"), lang: "es")
+#{
+  text(fill: rgb("#0a3d62"), block(below: 3pt, heading(level: 1, {
+    "Factura N° 2026-001 "
+    text(size: 8.33pt, "(borrador)")
+  })))
+  grid(columns: (1fr, 1fr), gutter: 9pt, block(width: 100%, inset: 6pt, stroke: 0.75pt + rgb("#cccccc"), radius: 3pt, breakable: false, par({
+    strong("Emisor")
+    linebreak()
+    "ACME S.A. "
+    emph("#1 en \\"calidad\\"")
+    linebreak()
+    "RUT 76.000.000-0"
+  })), block(width: 100%, inset: 6pt, stroke: 0.75pt + rgb("#cccccc"), radius: 3pt, breakable: false, par({
+    strong("Cliente")
+    linebreak()
+    "Ada & Co. <ada@example.com>"
+    linebreak()
+    "Santiago"
+  })))
+  table(columns: (50%, 1fr, 1fr, 1fr), stroke: 0.5pt + rgb("#999999"), inset: 3pt, table.header(repeat: true, table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Descripción"))), table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Cant."))), table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Precio"))), table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Total")))), par("Servicio *premium* con $variables$ y #hashtags"), table.cell(align: right, par("1")), table.cell(align: right, par("$100")), table.cell(align: right, par("$100")), table.cell(rowspan: 2, fill: rgb("#fafafa"), par("Licencias [anual]")), table.cell(align: right, fill: rgb("#fafafa"), par("2")), table.cell(align: right, fill: rgb("#fafafa"), par("$50")), table.cell(align: right, fill: rgb("#fafafa"), par("$100")), table.cell(colspan: 2, align: right, par("Descuento")), table.cell(align: right, par("-$10")), table.footer(table.cell(colspan: 3, align: right, par("Total")), table.cell(align: right, par(strong("$190")))))
+  text(size: 12pt, weight: "bold", align(right, par("Total a pagar: $190")))
+  list(par("Pago a 30 días"), par({
+    "Transferencia a "
+    link("https://example.com/pay?a=1&b=2", "example.com")
+  }))
+  pagebreak(weak: true)
+  text(size: 8pt, {
+    heading(level: 2, "Términos")
+    par(justify: true, "Lorem ipsum \\\\ dolor // sit @amet <label>.")
+  })
+}
+"
+`;

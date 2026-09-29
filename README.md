@@ -5,7 +5,7 @@ Generación de PDF en Node.js sin navegador: HTML/CSS → Typst → PDF.
 | Paquete | Estado |
 |---|---|
 | [`typst-compiler`](packages/typst-compiler) | `TypstBackend` + `CliBackend` (binario oficial de Typst, cero dependencias de runtime) |
-| [`html-to-typst`](packages/html-to-typst) | IR de layout + emisor Typst en modo código. Front-end HTML/CSS pendiente |
+| [`html-to-typst`](packages/html-to-typst) | HTML/CSS → IR → Typst: parse5, cascada CSS propia (selectores, especificidad, herencia, shorthands, `@page`, `@media print`), tablas con rowspan/colspan, flex/grid básicos, saltos de página |
 
 ## Requisitos
 
@@ -20,6 +20,13 @@ pnpm build       # tsup → ESM + CJS + .d.ts
 ```
 
 ## Uso
+
+```ts
+import { htmlToTypst } from "html-to-typst";
+
+const { source, warnings, assets } = htmlToTypst(html);
+// assets: rutas de <img> para resolver y pasar como `files` al compilador
+```
 
 ```ts
 import { CliBackend } from "typst-compiler";

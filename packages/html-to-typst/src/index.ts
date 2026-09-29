@@ -1,3 +1,5 @@
 export type * from "./ir.js";
 export { emitBlock, emitDocument, emitInline } from "./emit.js";
 export { str as typstString } from "./literals.js";
+export { htmlToTypst, type TranspileOptions, type TranspileResult } from "./transpile.js";
+export type { ConvertOptions } from "./convert.js";
