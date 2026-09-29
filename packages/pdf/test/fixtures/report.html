@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head><style>
+  :root { --ink: #1e272e; --accent: #0984e3; --soft: #f5f8fb }
+  @page {
+    size: A4; margin: 28mm 18mm 22mm;
+    background: #fbfcfe;
+    @top-left { content: element(brand) }
+    @top-right { content: "Informe anual 2026"; color: #636e72; font-size: 9pt }
+    @bottom-left { content: "Confidencial"; color: #b2bec3; font-size: 8pt }
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: var(--ink) }
+  }
+  body { font-family: serif; font-size: 10pt; color: var(--ink) }
+  .brand { position: running(brand); font-weight: bold; color: var(--accent) }
+  .watermark { position: fixed; top: 120mm; left: 40mm; transform: rotate(-30deg); font-size: 60pt; color: rgba(9, 132, 227, .07) }
+  h1 { color: var(--accent); margin: 0 0 4mm }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; margin: 6mm 0 }
+  .kpi { background: white; border-radius: 3mm; padding: 4mm; box-shadow: 0 1mm 3mm rgba(0, 0, 0, .15) }
+  .kpi b { display: block; font-size: 16pt; color: var(--accent) }
+  .ribbon { position: relative; top: -1mm; left: 2mm; color: #d63031 }
+  .box { position: relative; background: var(--soft); padding: 4mm; border-radius: 2mm; margin-bottom: 6mm }
+  .corner { position: absolute; right: 2mm; bottom: 2mm; font-size: 7pt; color: #636e72 }
+  table { width: 100% }
+  th, td { padding: 1.5mm; border-bottom: 0.5pt solid #dfe6e9 }
+  th { background: var(--ink); color: white; text-transform: uppercase; font-size: 8pt }
+  .num { text-align: right }
+  .pill { padding: 0 2mm; border-radius: 2mm; font-size: 8pt }
+  .ok { background: #d5f5e3; color: #1e8449 }
+  .warn { background: #fdebd0; color: #b9770e }
+</style></head>
+<body>
+  <div class="brand"><img src="assets/logo.svg" width="60" height="20" alt="ACME"> ACME Corp</div>
+  <div class="watermark">BORRADOR</div>
+  <h1>Informe anual <span class="ribbon">★ nuevo</span></h1>
+  <div class="kpis">
+    <div class="kpi"><b>+18%</b>Ingresos</div>
+    <div class="kpi"><b>312</b>Proyectos</div>
+    <div class="kpi"><b>4.8</b>Satisfacción</div>
+  </div>
+  <div class="box"><p>Resumen ejecutivo del período, con una nota anclada en la esquina inferior derecha de esta caja.</p><div class="corner">ref. 2026-A</div></div>
+  <table>
+    <thead><tr><th>#</th><th>Proyecto</th><th>Horas</th><th>Estado</th></tr></thead>
+    <tbody><tr><td>1</td><td>Proyecto B1</td><td class="num">137</td><td><span class="pill ok">En curso</span></td></tr><tr><td>2</td><td>Proyecto C2</td><td class="num">274</td><td><span class="pill ok">En curso</span></td></tr><tr><td>3</td><td>Proyecto D3</td><td class="num">411</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>4</td><td>Proyecto E4</td><td class="num">548</td><td><span class="pill ok">En curso</span></td></tr><tr><td>5</td><td>Proyecto F5</td><td class="num">685</td><td><span class="pill ok">En curso</span></td></tr><tr><td>6</td><td>Proyecto G6</td><td class="num">822</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>7</td><td>Proyecto H7</td><td class="num">959</td><td><span class="pill ok">En curso</span></td></tr><tr><td>8</td><td>Proyecto I8</td><td class="num">96</td><td><span class="pill ok">En curso</span></td></tr><tr><td>9</td><td>Proyecto J9</td><td class="num">233</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>10</td><td>Proyecto K10</td><td class="num">370</td><td><span class="pill ok">En curso</span></td></tr><tr><td>11</td><td>Proyecto L11</td><td class="num">507</td><td><span class="pill ok">En curso</span></td></tr><tr><td>12</td><td>Proyecto M12</td><td class="num">644</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>13</td><td>Proyecto N13</td><td class="num">781</td><td><span class="pill ok">En curso</span></td></tr><tr><td>14</td><td>Proyecto O14</td><td class="num">918</td><td><span class="pill ok">En curso</span></td></tr><tr><td>15</td><td>Proyecto P15</td><td class="num">55</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>16</td><td>Proyecto Q16</td><td class="num">192</td><td><span class="pill ok">En curso</span></td></tr><tr><td>17</td><td>Proyecto R17</td><td class="num">329</td><td><span class="pill ok">En curso</span></td></tr><tr><td>18</td><td>Proyecto S18</td><td class="num">466</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>19</td><td>Proyecto T19</td><td class="num">603</td><td><span class="pill ok">En curso</span></td></tr><tr><td>20</td><td>Proyecto U20</td><td class="num">740</td><td><span class="pill ok">En curso</span></td></tr><tr><td>21</td><td>Proyecto V21</td><td class="num">877</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>22</td><td>Proyecto W22</td><td class="num">14</td><td><span class="pill ok">En curso</span></td></tr><tr><td>23</td><td>Proyecto X23</td><td class="num">151</td><td><span class="pill ok">En curso</span></td></tr><tr><td>24</td><td>Proyecto Y24</td><td class="num">288</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>25</td><td>Proyecto Z25</td><td class="num">425</td><td><span class="pill ok">En curso</span></td></tr><tr><td>26</td><td>Proyecto A26</td><td class="num">562</td><td><span class="pill ok">En curso</span></td></tr><tr><td>27</td><td>Proyecto B27</td><td class="num">699</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>28</td><td>Proyecto C28</td><td class="num">836</td><td><span class="pill ok">En curso</span></td></tr><tr><td>29</td><td>Proyecto D29</td><td class="num">973</td><td><span class="pill ok">En curso</span></td></tr><tr><td>30</td><td>Proyecto E30</td><td class="num">110</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>31</td><td>Proyecto F31</td><td class="num">247</td><td><span class="pill ok">En curso</span></td></tr><tr><td>32</td><td>Proyecto G32</td><td class="num">384</td><td><span class="pill ok">En curso</span></td></tr><tr><td>33</td><td>Proyecto H33</td><td class="num">521</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>34</td><td>Proyecto I34</td><td class="num">658</td><td><span class="pill ok">En curso</span></td></tr><tr><td>35</td><td>Proyecto J35</td><td class="num">795</td><td><span class="pill ok">En curso</span></td></tr><tr><td>36</td><td>Proyecto K36</td><td class="num">932</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>37</td><td>Proyecto L37</td><td class="num">69</td><td><span class="pill ok">En curso</span></td></tr><tr><td>38</td><td>Proyecto M38</td><td class="num">206</td><td><span class="pill ok">En curso</span></td></tr><tr><td>39</td><td>Proyecto N39</td><td class="num">343</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>40</td><td>Proyecto O40</td><td class="num">480</td><td><span class="pill ok">En curso</span></td></tr><tr><td>41</td><td>Proyecto P41</td><td class="num">617</td><td><span class="pill ok">En curso</span></td></tr><tr><td>42</td><td>Proyecto Q42</td><td class="num">754</td><td><span class="pill warn">Atrasado</span></td></tr><tr><td>43</td><td>Proyecto R43</td><td class="num">891</td><td><span class="pill ok">En curso</span></td></tr><tr><td>44</td><td>Proyecto S44</td><td class="num">28</td><td><span class="pill ok">En curso</span></td></tr><tr><td>45</td><td>Proyecto T45</td><td class="num">165</td><td><span class="pill warn">Atrasado</span></td></tr></tbody>
+  </table>
+</body></html>

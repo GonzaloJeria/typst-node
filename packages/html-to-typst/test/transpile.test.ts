@@ -116,10 +116,10 @@ describe("blocks", () => {
   });
 
   it("reports unsupported CSS once per declaration site", () => {
-    const { warnings } = htmlToTypst('<div style="float: left"><p>a</p><p>b</p></div><p style="position: absolute">c</p>');
+    const { warnings } = htmlToTypst('<div style="float: left"><p>a</p><p>b</p></div><p style="clip-path: circle()">c</p>');
     expect(warnings).toEqual([
       "Unsupported CSS ignored: float: left (<div>)",
-      "Unsupported CSS ignored: position: absolute (<p>)",
+      "Unsupported CSS ignored: clip-path: circle() (<p>)",
     ]);
   });
 });

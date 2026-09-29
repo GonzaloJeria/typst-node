@@ -1,7 +1,8 @@
 /**
  * Selector subset: type, `*`, `#id`, `.class`, `[attr]`, `[attr=v]`,
  * `[attr~=v]`, `[attr^=v]`, `[attr$=v]`, `[attr*=v]`, `:first-child`,
- * `:last-child`, `:nth-child(odd|even|N)`, descendant and `>` combinators.
+ * `:last-child`, `:nth-child(odd|even|N)`, `:root`, trailing `::before` /
+ * `::after`, and descendant and `>` combinators.
  * Anything else makes the selector unsupported (never matches).
  */
 
@@ -29,6 +30,8 @@ interface Part {
 
 export interface Selector {
   parts: Part[];
+  /** Set when the selector targets `::before` / `::after` of the subject. */
+  pseudoElement?: "before" | "after";
   specificity: [number, number, number];
 }
 
@@ -40,6 +43,10 @@ const TOKEN = new RegExp(
 export function parseSelector(text: string): Selector | undefined {
   const parts: Part[] = [];
   let rest = text.trim();
+  // A trailing ::before/::after (or legacy single-colon form) targets a pseudo-element.
+  const pe = /::?(before|after)$/i.exec(rest);
+  const pseudoElement = pe ? (pe[1]!.toLowerCase() as "before" | "after") : undefined;
+  if (pe) rest = rest.slice(0, pe.index) || "*";
   let combinator: Part["combinator"] = null;
   let spec: [number, number, number] = [0, 0, 0];
 
@@ -79,11 +86,13 @@ export function parseSelector(text: string): Selector | undefined {
     rest = rest.slice(comb[0].length);
   }
   if (rest.trim().length > 0 || parts.length === 0) return undefined;
-  return { parts, specificity: spec };
+  if (pseudoElement) spec[2]++;
+  return pseudoElement ? { parts, specificity: spec, pseudoElement } : { parts, specificity: spec };
 }
 
 function parsePseudo(name: string, arg: string | undefined): ((el: SelectorElement) => boolean) | undefined {
   switch (name) {
+    case "root": return (el) => el.parent() === undefined;
     case "first-child": return (el) => el.position().index === 1;
     case "last-child": return (el) => { const p = el.position(); return p.index === p.count; };
     case "nth-child": {

@@ -2,7 +2,8 @@
 
 exports[`official compiler > matches the invoice snapshot 1`] = `
 "#set page(paper: "a4", margin: (top: 18mm, right: 15mm, bottom: 18mm, left: 15mm))
-#set text(font: ("Libertinus Serif",), size: 10pt, fill: rgb("#222222"), lang: "es")
+#set text(font: ("Libertinus Serif",), size: 10pt, fill: rgb("#222222"), lang: "es", top-edge: "ascender", bottom-edge: "descender")
+#set par(leading: 0.2em)
 #{
   text(fill: rgb("#0a3d62"), block(below: 3pt, heading(level: 1, {
     "Factura N° 2026-001 "

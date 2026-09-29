@@ -64,6 +64,38 @@ const { pdf, warnings } = await typst.compile({
 });
 ```
 
+## Soporte de HTML/CSS
+
+**Soportado:** cascada con especificidad, `!important`, herencia y variables CSS
+(`var()` con fallback, `:root`); `calc()` simple; colores hex/rgb/hsl con
+transparencia; `opacity` (aproximada: se aplica al texto, al fondo y al borde
+del elemento); fondos con color o `linear-gradient`/`radial-gradient`; padding,
+bordes (sólidos, `dashed`, `dotted`) y `border-radius`, también en elementos
+inline (badges, chips); `text-transform`; `::before`/`::after` con `content`
+(strings con escapes, `attr()`, comillas); `list-style` (marcadores, numeración
+alfabética y romana, `none`); tablas con rowspan/colspan; flex en fila y grid
+explícito; `@page`; saltos de página.
+
+**Posicionamiento y efectos:** `position: absolute` (anclado a la esquina que
+indiquen `top`/`right`/`bottom`/`left`, dentro del ancestro posicionado más
+cercano), `position: relative` con desplazamientos (también en línea),
+`position: fixed` (se repite en cada página, relativo a los bordes de la hoja);
+`transform` con `rotate`, `scale` y `translate`; `box-shadow` exterior con
+difuminado aproximado (la caja con sombra no se parte entre páginas).
+
+**Página:** fondo de página desde `@page { background }` o desde el fondo de
+`body`/`html`; encabezado y pie con las cajas de margen `@top-left|center|right`
+y `@bottom-left|center|right`, con `content` de texto, `counter(page)`,
+`counter(pages)` y `element(nombre)` para mover al margen HTML marcado con
+`position: running(nombre)` (por ejemplo, un logo).
+
+**Todavía no:** `float`, márgenes horizontales distintos de `auto`/0, `height`,
+`line-height`, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
+selectores `@page :first`/`:left`, imágenes de fondo.
+
+Nada se descarta en silencio: cada propiedad o valor que no se sabe renderizar
+genera un warning, y con `strict: true` `htmlToTypst` lanza un `TranspileError`.
+
 ## Regresión visual
 
 `packages/pdf/test/fixtures/*.html` se renderiza a PNG (50 ppi) y se compara píxel

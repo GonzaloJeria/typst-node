@@ -14,6 +14,19 @@ export type Size = Length | "auto";
 /** `#rrggbb` or `#rrggbbaa`. */
 export type Color = `#${string}`;
 
+export interface GradientStop {
+  color: Color;
+  /** Position along the gradient, 0–100 (%). Omitted stops are spaced evenly. */
+  offset?: number;
+}
+
+export type Gradient =
+  | { kind: "linear"; /** CSS angle in degrees (0 = to top, 90 = to right). */ angle: number; stops: GradientStop[] }
+  | { kind: "radial"; stops: GradientStop[] };
+
+/** Anything that can fill an area. */
+export type Paint = Color | Gradient;
+
 export type HAlign = "start" | "end" | "left" | "right" | "center";
 export type VAlign = "top" | "horizon" | "bottom";
 
@@ -27,6 +40,7 @@ export interface Sides<T> {
 export interface Stroke {
   width: Length;
   color: Color;
+  dash?: "dashed" | "dotted";
 }
 
 export interface TextStyle {
@@ -38,10 +52,24 @@ export interface TextStyle {
   tracking?: Length;
 }
 
+/** An outer `box-shadow` layer; lengths are absolute (pt). */
+export interface Shadow {
+  dx: Length;
+  dy: Length;
+  blur: Length;
+  spread: Length;
+  color: Color;
+}
+
+export type TransformOp =
+  | { kind: "rotate"; /** Clockwise degrees, as in CSS. */ deg: number }
+  | { kind: "scale"; x: number; y: number }
+  | { kind: "translate"; dx: Length; dy: Length };
+
 export interface BoxStyle {
   width?: Size;
   inset?: Sides<Length>;
-  fill?: Color;
+  fill?: Paint;
   stroke?: Sides<Stroke>;
   radius?: Length;
   /** Space above/below — margins already collapsed by the front-end. */
@@ -50,6 +78,19 @@ export interface BoxStyle {
   /** `break-inside: avoid` → false. */
   breakable?: boolean;
   align?: HAlign;
+  /** Outer shadows, painted behind the box (makes it unbreakable). */
+  shadows?: Shadow[];
+}
+
+export interface InlineBoxStyle {
+  width?: Size;
+  /** Horizontal padding: takes space in the line. */
+  inset?: Sides<Length>;
+  /** Vertical padding: painted without changing line height, as in CSS inline boxes. */
+  outset?: Sides<Length>;
+  fill?: Paint;
+  stroke?: Sides<Stroke>;
+  radius?: Length;
 }
 
 // ── Inline ──────────────────────────────────────────────────────────────────
@@ -65,8 +106,13 @@ export type Inline =
   | { kind: "code"; value: string }
   | { kind: "link"; href: string; children: Inline[] }
   | { kind: "styled"; style: TextStyle; children: Inline[] }
+  | { kind: "box"; style: InlineBoxStyle; children: Inline[] }
   | { kind: "linebreak" }
-  | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string };
+  | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string }
+  /** `position: relative` offset of inline content: painted shifted, laid out in place. */
+  | { kind: "move"; dx: Length; dy: Length; children: Inline[] }
+  /** Current page number or total page count (headers and footers). */
+  | { kind: "page-counter"; which: "page" | "pages" };
 
 // ── Block ───────────────────────────────────────────────────────────────────
 
@@ -75,7 +121,7 @@ export interface TableCell {
   colspan?: number;
   rowspan?: number;
   align?: HAlign;
-  fill?: Color;
+  fill?: Paint;
 }
 
 export interface TableRow {
@@ -85,7 +131,16 @@ export interface TableRow {
 export type Block =
   | { kind: "paragraph"; children: Inline[]; align?: HAlign; justify?: boolean }
   | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[] }
-  | { kind: "list"; ordered: boolean; start?: number; items: Block[][] }
+  | {
+      kind: "list";
+      ordered: boolean;
+      start?: number;
+      /** Bullet text for unordered lists; "" hides it (`list-style: none`). */
+      marker?: string;
+      /** Typst numbering pattern for ordered lists, e.g. "a." or "I.". */
+      numbering?: string;
+      items: Block[][];
+    }
   | { kind: "box"; style: BoxStyle; children: Block[] }
   | { kind: "styled-block"; style: TextStyle; children: Block[] }
   | {
@@ -95,14 +150,36 @@ export type Block =
       header?: TableRow[];
       body: TableRow[];
       footer?: TableRow[];
-      stroke?: Stroke | null;
+      /** Per-cell stroke: one for all sides, or per side (e.g. only bottom rules). */
+      stroke?: Stroke | Sides<Stroke> | null;
       inset?: Length;
     }
   | { kind: "grid"; columns: Size[]; gutter?: Length; cells: Block[][] }
   | { kind: "raw-block"; value: string; lang?: string }
   | { kind: "rule" }
   | { kind: "pagebreak"; weak?: boolean }
-  | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string };
+  | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string }
+  /**
+   * Out-of-flow content (`position: absolute`) anchored to a corner of the
+   * containing block; offsets point inwards from that corner.
+   */
+  | { kind: "place"; x: "left" | "right"; y: "top" | "bottom"; dx: Length; dy: Length; children: Block[] }
+  | { kind: "transform"; ops: TransformOp[]; children: Block[] };
+
+/** Content of one `@page` margin box. */
+export interface MarginBox {
+  /** Text from `content` strings and counters… */
+  inlines?: Inline[];
+  /** …or a running element moved here with `element()`. */
+  blocks?: Block[];
+  style?: TextStyle;
+}
+
+export interface MarginBand {
+  left?: MarginBox;
+  center?: MarginBox;
+  right?: MarginBox;
+}
 
 export interface PageSetup {
   paper?: string;
@@ -110,6 +187,11 @@ export interface PageSetup {
   width?: Length;
   height?: Length;
   margin?: Sides<Length>;
+  fill?: Paint;
+  header?: MarginBand;
+  footer?: MarginBand;
+  /** Content repeated on every page above the body (`position: fixed`). */
+  foreground?: Block[];
 }
 
 export interface Document {

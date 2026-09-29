@@ -1,4 +1,4 @@
-import type { Color, HAlign, Length, Sides, Size, Stroke } from "./ir.js";
+import type { Color, GradientStop, HAlign, Length, Paint, Sides, Size, Stroke } from "./ir.js";
 
 /**
  * Every piece of user text reaches Typst as a string literal, never as markup,
@@ -48,6 +48,7 @@ export function align(a: HAlign): string {
 }
 
 export function stroke(s: Stroke): string {
+  if (s.dash) return `(paint: ${color(s.color)}, thickness: ${length(s.width)}, dash: ${str(s.dash)})`;
   return `${length(s.width)} + ${color(s.color)}`;
 }
 
@@ -66,4 +67,32 @@ export function call(name: string, named: Record<string, string | undefined>, ..
     .filter(([, v]) => v !== undefined)
     .map(([k, v]) => `${k}: ${v}`);
   return `${name}(${[...args, ...positional].join(", ")})`;
+}
+
+export function paint(p: Paint): string {
+  if (typeof p === "string") return color(p);
+  const stops = normalizeStops(p.stops).map((s) => `(${color(s.color)}, ${num(s.offset)}%)`).join(", ");
+  if (p.kind === "radial") return `gradient.radial(${stops})`;
+  // CSS measures from "to top" clockwise; Typst from "to right" clockwise (y points down).
+  const angle = (((p.angle - 90) % 360) + 360) % 360;
+  return `gradient.linear(${stops}, angle: ${num(angle)}deg)`;
+}
+
+/** Fills in missing stop offsets the way CSS does and keeps them monotonic. */
+function normalizeStops(stops: GradientStop[]): { color: Color; offset: number }[] {
+  const offsets = stops.map((s) => s.offset);
+  offsets[0] ??= 0;
+  offsets[offsets.length - 1] ??= 100;
+  for (let i = 1; i < offsets.length; i++) {
+    if (offsets[i] !== undefined) {
+      offsets[i] = Math.max(offsets[i]!, offsets[i - 1]!);
+      continue;
+    }
+    let j = i;
+    while (offsets[j] === undefined) j++;
+    const from = offsets[i - 1]!;
+    const to = Math.max(offsets[j]!, from);
+    for (let k = i; k < j; k++) offsets[k] = from + ((to - from) * (k - i + 1)) / (j - i + 1);
+  }
+  return stops.map((s, i) => ({ color: s.color, offset: Math.min(100, Math.max(0, offsets[i]!)) }));
 }

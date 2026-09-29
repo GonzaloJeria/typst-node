@@ -2,7 +2,8 @@
 
 exports[`emitDocument > emits code-mode Typst 1`] = `
 "#set page(paper: "a4", margin: 2cm)
-#set text(font: ("Libertinus Serif",), size: 10pt, lang: "es")
+#set text(font: ("Libertinus Serif",), size: 10pt, lang: "es", top-edge: "ascender", bottom-edge: "descender")
+#set par(leading: 0.2em)
 #{
   heading(level: 1, "Factura #001")
   align(right, par({
