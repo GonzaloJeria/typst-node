@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`emitDocument > emits code-mode Typst 1`] = `
+"#set page(paper: "a4", margin: 2cm)
+#set text(font: ("Libertinus Serif",), size: 10pt, lang: "es")
+#{
+  heading(level: 1, "Factura #001")
+  align(right, par({
+    "Total: "
+    strong("$ 1.200 *IVA*")
+    linebreak()
+    link("https://example.com", "@example")
+  }))
+  table(columns: (1fr, auto, auto), table.header(repeat: true, table.cell(colspan: 2, par(strong("Ítem"))), []), table.cell(rowspan: 2, par("A")), [], table.cell(align: right, fill: rgb("#eeeeee"), []), [], [])
+  align(center, block(inset: (top: 4pt), fill: rgb("#fafafa"), breakable: false, enum(start: 3, par("uno"), [])))
+  pagebreak(weak: true)
+  raw(block: true, lang: "ts", "const a = \\"b\\";\\n")
+  line(length: 100%)
+}
+"
+`;
