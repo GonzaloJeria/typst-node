@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseDeclarations, parseStylesheet } from "../src/css/parse.js";
 import { matches, parseSelector, type SelectorElement } from "../src/css/selector.js";
-import { parseColor, parseFontSize, parseLength } from "../src/css/values.js";
+import { parseColor, parseFontSize, parseGradient, parseLength } from "../src/css/values.js";
 
 const ctx = { fontSize: 10, rootFontSize: 12 };
 
@@ -19,7 +19,36 @@ describe("values", () => {
 
   it("rejects unitless non-zero and garbage lengths", () => {
     expect(parseLength("12", ctx)).toBeUndefined();
-    expect(parseLength("calc(1px + 2px)", ctx)).toBeUndefined();
+    expect(parseLength("calc(1px + )", ctx)).toBeUndefined();
+    expect(parseLength("calc(10% + 2px)", ctx)).toBeUndefined();
+  });
+
+  it.each([
+    ["calc(10px + 2pt)", { value: 9.5, unit: "pt" }],
+    ["calc(2 * 1em - 4px)", { value: 17, unit: "pt" }],
+    ["calc((100% - 20%) / 2)", { value: 40, unit: "%" }],
+  ])("evaluates %s", (input, expected) => {
+    expect(parseLength(input, ctx)).toEqual(expected);
+  });
+
+  it.each([
+    ["hsl(0, 100%, 50%)", "#ff0000"],
+    ["hsl(240 100% 50% / 0.5)", "#0000ff80"],
+  ])("parses color %s", (input, expected) => {
+    expect(parseColor(input)).toBe(expected);
+  });
+
+  it("parses gradients", () => {
+    expect(parseGradient("linear-gradient(135deg, #6c5ce7, #00cec9 80%)")).toEqual({
+      kind: "linear",
+      angle: 135,
+      stops: [{ color: "#6c5ce7" }, { color: "#00cec9", offset: 80 }],
+    });
+    expect(parseGradient("linear-gradient(to right, red, blue)")).toMatchObject({ angle: 90 });
+    expect(parseGradient("linear-gradient(red, rgba(0, 0, 255, .5))")).toMatchObject({ angle: 180, stops: [{}, { color: "#0000ff80" }] });
+    expect(parseGradient("radial-gradient(circle at top, white, black)")).toMatchObject({ kind: "radial" });
+    expect(parseGradient("linear-gradient(red)")).toBeUndefined();
+    expect(parseGradient("url(x.png)")).toBeUndefined();
   });
 
   it.each([
@@ -95,7 +124,14 @@ describe("selectors", () => {
     expect(parseSelector("#a .b c:first-child")!.specificity).toEqual([1, 2, 1]);
   });
 
-  it.each(["a + b", "a ~ b", "a:hover", "a::before", "a:not(.b)"])("rejects unsupported %s", (sel) => {
+  it("parses ::before/::after and :root", () => {
+    expect(parseSelector("li.x::before")).toMatchObject({ pseudoElement: "before", specificity: [0, 1, 2] });
+    expect(parseSelector("::after")).toMatchObject({ pseudoElement: "after" });
+    expect(matches(parseSelector(":root")!, table)).toBe(true);
+    expect(matches(parseSelector(":root")!, td)).toBe(false);
+  });
+
+  it.each(["a + b", "a ~ b", "a:hover", "a::marker", "a:not(.b)"])("rejects unsupported %s", (sel) => {
     expect(parseSelector(sel)).toBeUndefined();
   });
 });

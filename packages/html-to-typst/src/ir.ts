@@ -14,6 +14,19 @@ export type Size = Length | "auto";
 /** `#rrggbb` or `#rrggbbaa`. */
 export type Color = `#${string}`;
 
+export interface GradientStop {
+  color: Color;
+  /** Position along the gradient, 0–100 (%). Omitted stops are spaced evenly. */
+  offset?: number;
+}
+
+export type Gradient =
+  | { kind: "linear"; /** CSS angle in degrees (0 = to top, 90 = to right). */ angle: number; stops: GradientStop[] }
+  | { kind: "radial"; stops: GradientStop[] };
+
+/** Anything that can fill an area. */
+export type Paint = Color | Gradient;
+
 export type HAlign = "start" | "end" | "left" | "right" | "center";
 export type VAlign = "top" | "horizon" | "bottom";
 
@@ -27,6 +40,7 @@ export interface Sides<T> {
 export interface Stroke {
   width: Length;
   color: Color;
+  dash?: "dashed" | "dotted";
 }
 
 export interface TextStyle {
@@ -41,7 +55,7 @@ export interface TextStyle {
 export interface BoxStyle {
   width?: Size;
   inset?: Sides<Length>;
-  fill?: Color;
+  fill?: Paint;
   stroke?: Sides<Stroke>;
   radius?: Length;
   /** Space above/below — margins already collapsed by the front-end. */
@@ -50,6 +64,17 @@ export interface BoxStyle {
   /** `break-inside: avoid` → false. */
   breakable?: boolean;
   align?: HAlign;
+}
+
+export interface InlineBoxStyle {
+  width?: Size;
+  /** Horizontal padding: takes space in the line. */
+  inset?: Sides<Length>;
+  /** Vertical padding: painted without changing line height, as in CSS inline boxes. */
+  outset?: Sides<Length>;
+  fill?: Paint;
+  stroke?: Sides<Stroke>;
+  radius?: Length;
 }
 
 // ── Inline ──────────────────────────────────────────────────────────────────
@@ -65,6 +90,7 @@ export type Inline =
   | { kind: "code"; value: string }
   | { kind: "link"; href: string; children: Inline[] }
   | { kind: "styled"; style: TextStyle; children: Inline[] }
+  | { kind: "box"; style: InlineBoxStyle; children: Inline[] }
   | { kind: "linebreak" }
   | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string };
 
@@ -75,7 +101,7 @@ export interface TableCell {
   colspan?: number;
   rowspan?: number;
   align?: HAlign;
-  fill?: Color;
+  fill?: Paint;
 }
 
 export interface TableRow {
@@ -85,7 +111,16 @@ export interface TableRow {
 export type Block =
   | { kind: "paragraph"; children: Inline[]; align?: HAlign; justify?: boolean }
   | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[] }
-  | { kind: "list"; ordered: boolean; start?: number; items: Block[][] }
+  | {
+      kind: "list";
+      ordered: boolean;
+      start?: number;
+      /** Bullet text for unordered lists; "" hides it (`list-style: none`). */
+      marker?: string;
+      /** Typst numbering pattern for ordered lists, e.g. "a." or "I.". */
+      numbering?: string;
+      items: Block[][];
+    }
   | { kind: "box"; style: BoxStyle; children: Block[] }
   | { kind: "styled-block"; style: TextStyle; children: Block[] }
   | {

@@ -50,7 +50,15 @@ function htmlText(html: string): string {
 describe("content consistency (HTML text survives into the IR)", () => {
   it.each(fixtures)("%s", (file) => {
     const html = read(file);
-    const irText = documentText(htmlToTypst(html).document).replace(/[“”]/g, "").replace(/\s+/g, "");
-    expect(irText).toBe(htmlText(html));
+    // Generated content (::before, quotes) may add text and text-transform may
+    // change case, so the HTML text must appear, in order, within the IR text.
+    const ir = documentText(htmlToTypst(html).document).replace(/\s+/g, "").toLowerCase();
+    const source = htmlText(html).toLowerCase();
+    let at = 0;
+    for (const ch of source) {
+      at = ir.indexOf(ch, at);
+      expect(at, `"${ch}" from the HTML is missing in the IR text`).toBeGreaterThanOrEqual(0);
+      at++;
+    }
   });
 });

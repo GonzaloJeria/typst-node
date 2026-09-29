@@ -1,5 +1,5 @@
 import type { Block, Document, Inline, Size, TableCell, TableRow, TextStyle } from "./ir.js";
-import { align, call, color, length, num, sides, size, str, stroke } from "./literals.js";
+import { align, call, color, length, num, paint, sides, size, str, stroke } from "./literals.js";
 
 /**
  * IR → Typst source. The body is emitted entirely in code mode: every node is
@@ -21,11 +21,22 @@ export function emitDocument(doc: Document): string {
         }),
     );
   }
-  const text = { ...textArgs(doc.text ?? {}), lang: doc.lang === undefined ? undefined : str(doc.lang) };
-  if (Object.values(text).some((v) => v !== undefined)) lines.push("#" + call("set text", text));
+  // CSS line boxes span the font's ascender to descender; Typst's default
+  // cap-height/baseline edges would let lines of text touch or overlap.
+  const text = {
+    ...textArgs(doc.text ?? {}),
+    lang: doc.lang === undefined ? undefined : str(doc.lang),
+    "top-edge": str("ascender"),
+    "bottom-edge": str("descender"),
+  };
+  lines.push("#" + call("set text", text));
+  lines.push("#" + call("set par", { leading: LINE_GAP }));
   lines.push(`#${seq(doc.children.map(emitBlock))}`);
   return lines.join("\n") + "\n";
 }
+
+/** Gap between line boxes that approximates `line-height: normal` (≈1.2). */
+const LINE_GAP = "0.2em";
 
 /** Joins content values; a code block concatenates its expressions. */
 function seq(items: string[]): string {
@@ -66,6 +77,21 @@ export function emitInline(node: Inline): string {
       return `link(${str(node.href)}, ${inlines(node.children)})`;
     case "styled":
       return call("text", textArgs(node.style), inlines(node.children));
+    case "box": {
+      const s = node.style;
+      return call(
+        "box",
+        {
+          width: s.width && size(s.width),
+          inset: s.inset && sides(s.inset, length),
+          outset: s.outset && sides(s.outset, length),
+          fill: s.fill && paint(s.fill),
+          stroke: s.stroke && sides(s.stroke, stroke),
+          radius: s.radius && length(s.radius),
+        },
+        inlines(node.children),
+      );
+    }
     case "linebreak":
       return "linebreak()";
     case "image":
@@ -104,8 +130,17 @@ export function emitBlock(node: Block): string {
     case "list": {
       const items = node.items.map(blocks);
       return node.ordered
-        ? call("enum", { start: node.start === undefined ? undefined : num(node.start) }, ...items)
-        : call("list", {}, ...items);
+        ? call(
+            "enum",
+            {
+              start: node.start === undefined ? undefined : num(node.start),
+              numbering: node.numbering === undefined ? undefined : str(node.numbering),
+              // An empty numbering pattern hides the numbers (`list-style: none`).
+              ...(node.numbering === "" ? { numbering: "n => []" } : {}),
+            },
+            ...items,
+          )
+        : call("list", { marker: node.marker === undefined ? undefined : node.marker === "" ? "[]" : str(node.marker) }, ...items);
     }
     case "box": {
       const s = node.style;
@@ -114,7 +149,7 @@ export function emitBlock(node: Block): string {
         {
           width: s.width && size(s.width),
           inset: s.inset && sides(s.inset, length),
-          fill: s.fill && color(s.fill),
+          fill: s.fill && paint(s.fill),
           stroke: s.stroke && sides(s.stroke, stroke),
           radius: s.radius && length(s.radius),
           above: s.above && length(s.above),
@@ -171,7 +206,7 @@ function cell(c: TableCell): string {
     colspan: c.colspan && c.colspan > 1 ? num(c.colspan) : undefined,
     rowspan: c.rowspan && c.rowspan > 1 ? num(c.rowspan) : undefined,
     align: c.align && align(c.align),
-    fill: c.fill && color(c.fill),
+    fill: c.fill && paint(c.fill),
   };
   const body = blocks(c.children);
   return Object.values(named).some((v) => v !== undefined) ? call("table.cell", named, body) : body;

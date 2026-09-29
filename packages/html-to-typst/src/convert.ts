@@ -1,8 +1,9 @@
-import { Cascade, type ComputedStyle } from "./css/cascade.js";
-import { parseLength, parseColor, splitValue, type LengthContext } from "./css/values.js";
+import { Cascade, type ComputedStyle, type PseudoElement } from "./css/cascade.js";
+import { checkDeclaration } from "./css/support.js";
+import { parseColor, parseGradient, parseLength, splitValue, withAlpha, type LengthContext } from "./css/values.js";
 import { attr, isElement, isText, type Element, type Node } from "./dom.js";
 import type {
-  Block, BoxStyle, Color, HAlign, Inline, Length, Sides, Size, Stroke, TableCell, TableRow, TextStyle,
+  Block, BoxStyle, Color, HAlign, Inline, InlineBoxStyle, Length, Paint, Sides, Size, Stroke, TableCell, TableRow, TextStyle,
 } from "./ir.js";
 
 export interface ConvertOptions {
@@ -22,18 +23,6 @@ const INLINE = new Set(["a", "abbr", "b", "bdi", "bdo", "br", "cite", "code", "d
 
 const HEADINGS: Record<string, 1 | 2 | 3 | 4 | 5 | 6> = { h1: 1, h2: 2, h3: 3, h4: 4, h5: 5, h6: 6 };
 
-/** Properties that are ignored with a warning because Typst has no equivalent in this mapping. */
-const UNSUPPORTED: Record<string, (v: string) => boolean> = {
-  float: (v) => v !== "none",
-  position: (v) => v !== "static" && v !== "relative",
-  transform: (v) => v !== "none",
-  "z-index": () => true,
-  "flex-wrap": (v) => v !== "nowrap",
-  "background-image": (v) => v !== "none",
-  "box-shadow": (v) => v !== "none",
-  "line-height": (v) => v !== "normal",
-};
-
 export class Converter {
   readonly warnings = new Set<string>();
   readonly #generics: NonNullable<ConvertOptions["genericFamilies"]>;
@@ -49,15 +38,18 @@ export class Converter {
     if (!s) {
       s = this.cascade.compute(el, parent, attr(el, "style"));
       this.#styles.set(el, s);
-      for (const [prop, isBad] of Object.entries(UNSUPPORTED)) {
-        const v = s.props.get(prop);
-        // Only warn where the property is declared, not where it is inherited.
-        if (v !== undefined && isBad(v) && parent?.props.get(prop) !== v) {
-          this.warnings.add(`Unsupported CSS ignored: ${prop}: ${v} (<${el.tagName}>)`);
-        }
-      }
+      this.#validate(s, el.tagName);
     }
     return s;
+  }
+
+  /** Warns about every declaration on the element that cannot be rendered as written. */
+  #validate(s: ComputedStyle, where: string): void {
+    for (const w of this.cascade.warnings.splice(0)) this.warnings.add(w);
+    for (const [prop, value] of s.own) {
+      const warning = checkDeclaration(prop, value, where);
+      if (warning) this.warnings.add(warning);
+    }
   }
 
   // ── Block formatting context ──────────────────────────────────────────────
@@ -72,9 +64,10 @@ export class Converter {
       run = new InlineRun();
     };
 
+    this.#pseudo(run, container, style, "before");
     for (const child of container.childNodes) {
       if (isText(child)) {
-        run.text(child.value, style.props.get("white-space"));
+        run.text(child.value, style.props);
         continue;
       }
       if (!isElement(child) || SKIP.has(child.tagName)) continue;
@@ -88,6 +81,7 @@ export class Converter {
         out.push(...this.#block(child, cs, style));
       }
     }
+    this.#pseudo(run, container, style, "after");
     flush();
     return out;
   }
@@ -156,9 +150,10 @@ export class Converter {
     }
     const inset = sides((side) => positive(parseLength(p.get(`padding-${side}`) ?? "", ctx)));
     if (inset) box.inset = inset;
-    const fill = parseColor(p.get("background-color") ?? "");
-    if (fill && fill !== "#00000000") box.fill = fill;
-    const stroke = sides((side) => borderStroke(p, side, ctx));
+    const opacity = opacityOf(s);
+    const fill = backgroundOf(p, opacity);
+    if (fill) box.fill = fill;
+    const stroke = sides((side) => borderStroke(p, side, ctx, opacity));
     if (stroke) box.stroke = stroke;
     const radius = positive(parseLength(p.get("border-radius") ?? "", ctx));
     if (radius) box.radius = radius;
@@ -186,7 +181,20 @@ export class Converter {
     }
     const ordered = el.tagName === "ol";
     const start = Number(attr(el, "start"));
-    return { kind: "list", ordered, items, ...(ordered && Number.isInteger(start) && start !== 1 ? { start } : {}) };
+    const list: Extract<Block, { kind: "list" }> = { kind: "list", ordered, items };
+    if (ordered && Number.isInteger(start) && start !== 1) list.start = start;
+    const cssType = style.props.get("list-style-type")?.toLowerCase();
+    const typeAttr = attr(el, "type");
+    if (ordered) {
+      const pattern =
+        cssType === "none" ? "" : cssType ? ORDERED_STYLES[cssType] : typeAttr && /^[aAiI1]$/.test(typeAttr) ? `${typeAttr}.` : undefined;
+      if (pattern !== undefined && pattern !== "1.") list.numbering = pattern;
+    } else if (cssType) {
+      const quoted = /^(["'])(.*)\1$/.exec(cssType);
+      const marker = quoted ? unescapeCss(quoted[2]!) : cssType === "none" ? "" : UNORDERED_STYLES[cssType];
+      if (marker !== undefined) list.marker = marker;
+    }
+    return list;
   }
 
   #grid(el: Element, style: ComputedStyle, display: "flex" | "grid"): Block[] {
@@ -224,14 +232,29 @@ export class Converter {
   // ── Inline formatting context ─────────────────────────────────────────────
 
   #inlineChildren(run: InlineRun, el: Element, style: ComputedStyle): void {
+    this.#pseudo(run, el, style, "before");
     for (const child of el.childNodes) {
-      if (isText(child)) run.text(child.value, style.props.get("white-space"));
+      if (isText(child)) run.text(child.value, style.props);
       else if (isElement(child) && !SKIP.has(child.tagName)) {
         const cs = this.style(child, style);
         if (displayOf(child, cs) === "none") continue;
         this.#inlineInto(run, child, cs, style);
       }
     }
+    this.#pseudo(run, el, style, "after");
+  }
+
+  /** Emits `::before` / `::after` generated content as inline text. */
+  #pseudo(run: InlineRun, el: Element, style: ComputedStyle, which: PseudoElement): void {
+    if (!this.cascade.hasPseudo(el, which)) return;
+    const ps = this.cascade.compute(el, style, undefined, which);
+    this.#validate(ps, `${el.tagName}::${which}`);
+    const content = ps.own.get("content");
+    if (!content || ps.props.get("display") === "none") return;
+    const text = parseContent(content, el, (msg) => this.warnings.add(`${msg} (<${el.tagName}::${which}>)`));
+    if (!text) return;
+    const children = run.nested(() => run.text(text, ps.props));
+    run.splice(this.#decorate(children, "", ps, style));
   }
 
   #inlineInto(run: InlineRun, el: Element, style: ComputedStyle, parent: ComputedStyle): void {
@@ -275,13 +298,47 @@ export class Converter {
       }
     }
 
-    const deco = style.props.get("text-decoration") ?? style.props.get("text-decoration-line");
+    run.splice(this.#decorate(children, tag, style, parent));
+  }
+
+  /** Applies CSS text decoration, text style changes and inline box painting. */
+  #decorate(nodes: Inline[], tag: string, style: ComputedStyle, parent: ComputedStyle): Inline[] {
+    let children = nodes;
+    const wrap = (node: Inline) => (children = [node]);
+    const deco = style.own.get("text-decoration") ?? style.own.get("text-decoration-line");
     if (deco?.includes("underline") && tag !== "u" && tag !== "ins") wrap({ kind: "underline", children });
     if (deco?.includes("line-through") && !["s", "del", "strike"].includes(tag)) wrap({ kind: "strike", children });
 
     const diff = this.#textDiff(style, parent);
     if (diff) wrap({ kind: "styled", style: diff, children });
-    run.splice(children);
+
+    const box = this.#inlineBox(style);
+    if (box && children.length) wrap({ kind: "box", style: box, children });
+    return children;
+  }
+
+  /** Background, border and padding of an inline (or inline-block) element. */
+  #inlineBox(s: ComputedStyle): InlineBoxStyle | undefined {
+    const p = s.own;
+    const ctx = lengthContext(s);
+    const opacity = opacityOf(s);
+    const box: InlineBoxStyle = {};
+    const fill = backgroundOf(p, opacity);
+    if (fill) box.fill = fill;
+    const stroke = sides((side) => borderStroke(s.props, side, ctx, opacity, p));
+    if (stroke) box.stroke = stroke;
+    const radius = positive(parseLength(p.get("border-radius") ?? "", ctx));
+    if (radius) box.radius = radius;
+    const pad = (side: "top" | "right" | "bottom" | "left") => positive(parseLength(p.get(`padding-${side}`) ?? "", ctx));
+    const inset = sides((side) => (side === "left" || side === "right" ? pad(side) : undefined));
+    if (inset) box.inset = inset;
+    const outset = sides((side) => (side === "top" || side === "bottom" ? pad(side) : undefined));
+    if (outset) box.outset = outset;
+    if (s.props.get("display") === "inline-block") {
+      const w = parseLength(p.get("width") ?? "", ctx);
+      if (w) box.width = w;
+    }
+    return Object.keys(box).length ? box : undefined;
   }
 
   #image(el: Element, style: ComputedStyle): Extract<Inline, { kind: "image" }> | undefined {
@@ -389,8 +446,11 @@ export class Converter {
     if (rowspan > 1) cell.rowspan = rowspan;
     const align = hAlign(style.props.get("text-align")) ?? hAlign(attr(td, "align")) ?? (isTh ? "center" : undefined);
     if (align && align !== "start" && align !== "left") cell.align = align;
-    const fill = parseColor(style.props.get("background-color") ?? rowStyle.props.get("background-color") ?? attr(td, "bgcolor") ?? "");
-    if (fill && fill !== "#00000000") cell.fill = fill;
+    const fill =
+      backgroundOf(style.props, opacityOf(style)) ??
+      backgroundOf(rowStyle.props, opacityOf(rowStyle)) ??
+      backgroundOf(new Map([["background-color", attr(td, "bgcolor") ?? ""]]), 1);
+    if (fill) cell.fill = fill;
     // Children paragraphs already carry alignment; drop it to avoid doubling.
     for (const b of children) if (b.kind === "paragraph") delete b.align;
     return cell;
@@ -403,9 +463,10 @@ export class Converter {
     const out: TextStyle = {};
     const changed = (p: string) => s.props.get(p) !== parent?.props.get(p);
 
-    if (changed("color")) {
-      const c = parseColor(s.props.get("color") ?? "");
-      if (c) out.fill = c;
+    const opacity = opacityOf(s);
+    if (changed("color") || opacity < 1) {
+      const c = parseColor(s.props.get("color") ?? "") ?? (opacity < 1 ? ("#000000" as Color) : undefined);
+      if (c) out.fill = withAlpha(c, opacity);
     }
     if (changed("font-family")) {
       const f = this.fontFamily(s.props.get("font-family") ?? "");
@@ -450,7 +511,9 @@ class InlineRun {
   /** True when the previous emitted character was collapsible whitespace (or line start). */
   #lastSpace = true;
 
-  text(value: string, whiteSpace: string | undefined): void {
+  text(raw: string, props: ReadonlyMap<string, string>): void {
+    const whiteSpace = props.get("white-space");
+    const value = transformText(raw, props.get("text-transform"));
     if (whiteSpace === "pre" || whiteSpace === "pre-wrap" || whiteSpace === "break-spaces") {
       value.split("\n").forEach((line, i) => {
         if (i > 0) this.push({ kind: "linebreak" }, true);
@@ -461,10 +524,14 @@ class InlineRun {
     if (whiteSpace === "pre-line") {
       value.split("\n").forEach((line, i) => {
         if (i > 0) this.push({ kind: "linebreak" }, true);
-        this.text(line, undefined);
+        this.#collapse(line);
       });
       return;
     }
+    this.#collapse(value);
+  }
+
+  #collapse(value: string): void {
     let collapsed = value.replace(/[ \t\n\r\f]+/g, " ");
     if (this.#lastSpace) collapsed = collapsed.replace(/^ /, "");
     if (!collapsed) return;
@@ -625,15 +692,24 @@ function sides<T>(get: (side: "top" | "right" | "bottom" | "left") => T | undefi
 
 const BORDER_WIDTHS: Record<string, number> = { thin: 0.75, medium: 2.25, thick: 3.75 };
 
-function borderStroke(p: ReadonlyMap<string, string>, side: string, ctx: LengthContext): Stroke | undefined {
+function borderStroke(
+  props: ReadonlyMap<string, string>,
+  side: string,
+  ctx: LengthContext,
+  opacity = 1,
+  own: ReadonlyMap<string, string> = props,
+): Stroke | undefined {
+  const p = own;
   const style = p.get(`border-${side}-style`);
   if (!style || style === "none" || style === "hidden") return undefined;
   const w = p.get(`border-${side}-width`) ?? "medium";
   const width = w in BORDER_WIDTHS ? { value: BORDER_WIDTHS[w]!, unit: "pt" as const } : parseLength(w, ctx);
   if (!width || width.value <= 0) return undefined;
   const c = p.get(`border-${side}-color`);
-  const color = (c && c !== "currentcolor" ? parseColor(c) : undefined) ?? parseColor(p.get("color") ?? "") ?? ("#000000" as Color);
-  return { width, color };
+  const color = (c && c !== "currentcolor" ? parseColor(c) : undefined) ?? parseColor(props.get("color") ?? "") ?? ("#000000" as Color);
+  const stroke: Stroke = { width, color: withAlpha(color, opacity) };
+  if (style === "dashed" || style === "dotted") stroke.dash = style;
+  return stroke;
 }
 
 function firstStroke(s: ComputedStyle, ctx: LengthContext): Stroke | undefined {
@@ -670,3 +746,59 @@ function round(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+
+const ORDERED_STYLES: Record<string, string> = {
+  decimal: "1.", "lower-alpha": "a.", "lower-latin": "a.", "upper-alpha": "A.", "upper-latin": "A.",
+  "lower-roman": "i.", "upper-roman": "I.",
+};
+const UNORDERED_STYLES: Record<string, string | undefined> = { disc: undefined, circle: "◦", square: "▪" };
+
+function opacityOf(s: ComputedStyle): number {
+  const v = s.own.get("opacity")?.trim();
+  if (!v) return 1;
+  const n = v.endsWith("%") ? Number(v.slice(0, -1)) / 100 : Number(v);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 1;
+}
+
+/** Background paint: a gradient wins over the color layer, as it is painted on top. */
+function backgroundOf(p: ReadonlyMap<string, string>, opacity: number): Paint | undefined {
+  const gradient = parseGradient(p.get("background-image") ?? "");
+  if (gradient) {
+    return { ...gradient, stops: gradient.stops.map((st) => ({ ...st, color: withAlpha(st.color, opacity) })) };
+  }
+  const color = parseColor(p.get("background-color") ?? "");
+  if (!color || color === "#00000000") return undefined;
+  return withAlpha(color, opacity);
+}
+
+function transformText(value: string, transform: string | undefined): string {
+  switch (transform) {
+    case "uppercase": return value.toUpperCase();
+    case "lowercase": return value.toLowerCase();
+    case "capitalize": return value.replace(/(^|[\s\-(“"'])(\p{L})/gu, (_, pre: string, ch: string) => pre + ch.toUpperCase());
+    default: return value;
+  }
+}
+
+/** Evaluates a CSS `content` value: strings (with escapes), attr(), quotes. */
+function parseContent(value: string, el: Element, warn: (message: string) => void): string {
+  const v = value.trim();
+  if (v === "none" || v === "normal") return "";
+  let out = "";
+  const re = /"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|attr\(\s*([-\w]+)\s*\)|(open-quote|close-quote|no-open-quote|no-close-quote)|(\S+\([^)]*\)|\S+)/g;
+  for (const m of v.matchAll(re)) {
+    if (m[1] !== undefined || m[2] !== undefined) out += unescapeCss(m[1] ?? m[2]!);
+    else if (m[3]) out += attr(el, m[3]) ?? "";
+    else if (m[4] === "open-quote") out += "“";
+    else if (m[4] === "close-quote") out += "”";
+    else if (m[5]) warn(`Unsupported content value ignored: ${m[5]}`);
+  }
+  return out;
+}
+
+/** Resolves CSS string escapes such as `\2713 ` and `\"`. */
+function unescapeCss(s: string): string {
+  return s.replace(/\\([0-9a-fA-F]{1,6})\s?|\\(.)/g, (_, hex: string | undefined, ch: string | undefined) =>
+    hex ? String.fromCodePoint(parseInt(hex, 16)) : ch!,
+  );
+}

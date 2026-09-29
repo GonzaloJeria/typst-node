@@ -12,6 +12,16 @@ export interface TranspileOptions extends ConvertOptions {
   css?: string;
   /** Root font size in pt (browser default: 16px = 12pt). */
   rootFontSize?: number;
+  /** Throw a `TranspileError` instead of returning warnings. Default: false. */
+  strict?: boolean;
+}
+
+/** Thrown in strict mode when the input uses HTML/CSS that cannot be rendered faithfully. */
+export class TranspileError extends Error {
+  override name = "TranspileError";
+  constructor(readonly warnings: string[]) {
+    super(`HTML/CSS not fully supported:\n- ${warnings.join("\n- ")}`);
+  }
 }
 
 export interface TranspileResult {
@@ -54,8 +64,11 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   const lang = attr(htmlEl, "lang")?.split("-")[0]?.toLowerCase();
   if (lang && /^[a-z]{2,3}$/.test(lang)) document.lang = lang;
 
+  const warnings = [...converter.warnings, ...cascade.warnings];
+  if (options.strict && warnings.length) throw new TranspileError(warnings);
+
   const assets = [...new Set(findAll(doc, "img").map((img) => attr(img, "src")).filter((s): s is string => !!s))];
-  return { source: emitDocument(document), document, warnings: [...converter.warnings], assets };
+  return { source: emitDocument(document), document, warnings, assets };
 }
 
 const UA_CSS = `
