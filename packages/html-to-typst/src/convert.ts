@@ -315,10 +315,11 @@ export class Converter {
       else if (child.tagName === "col") colEls.push(child);
       else if (child.tagName === "caption") this.warnings.add("<caption> is not supported yet and was dropped");
     }
-    // Without <thead>, a leading row of only <th> cells acts as the header.
-    const first = sections.body[0];
-    if (sections.header.length === 0 && first && cellsOf(first).every((c) => c.tagName === "th") && cellsOf(first).length > 0) {
-      sections.header.push(sections.body.shift()!);
+    // Without <thead>, leading rows made only of <th> cells act as the header
+    // (all of them, so header rowspans stay inside the header section).
+    if (sections.header.length === 0) {
+      const isHeaderRow = (tr: Element) => cellsOf(tr).length > 0 && cellsOf(tr).every((c) => c.tagName === "th");
+      while (sections.body.length > 1 && isHeaderRow(sections.body[0]!)) sections.header.push(sections.body.shift()!);
     }
 
     const ctx = lengthContext(style);

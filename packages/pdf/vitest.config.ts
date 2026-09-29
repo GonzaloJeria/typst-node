@@ -4,7 +4,7 @@ export default defineProject({
   resolve: { conditions: ["source"] },
   ssr: { resolve: { conditions: ["source"], externalConditions: ["source"] } },
   test: {
-    name: "typst-compiler",
+    name: "pdf",
     include: ["test/**/*.test.ts"],
   },
 });

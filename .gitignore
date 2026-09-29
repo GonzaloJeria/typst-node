@@ -3,3 +3,4 @@ dist/
 coverage/
 *.tsbuildinfo
 .DS_Store
+packages/pdf/test/visual/__diff__/

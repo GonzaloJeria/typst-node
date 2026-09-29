@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head><style>
+  @page { size: A4; margin: 15mm }
+  body { font-family: serif; font-size: 10pt }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px }
+  .card { border: 1px solid #ddd; border-radius: 6px; padding: 10px; background: #fcfcfc }
+  .card h3 { margin-top: 0; color: #16a085 }
+  .row { display: flex; gap: 8px; margin: 12px 0 }
+  .row > div { padding: 6px; background: #ecf0f1 }
+  .grow { flex: 1 }
+  .fixed { width: 120px }
+  .centered { width: 60%; margin: 16px auto; border: 2px dashed #e67e22; padding: 12px; text-align: center }
+  .sides { border-top: 3px solid #c0392b; border-bottom: 1px solid #c0392b; padding: 6px 0 }
+  .keep { break-inside: avoid; border: 1px solid #999; padding: 8px; margin-top: 12px }
+  .pb { page-break-before: always }
+</style></head>
+<body>
+  <h1>Layout</h1>
+  <div class="cards">
+    <div class="card"><h3>One</h3><p>First card.</p></div>
+    <div class="card"><h3>Two</h3><p>Second card with more text to wrap across lines.</p></div>
+    <div class="card"><h3>Three</h3><p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAJUlEQVR4nGP48Pk7HHHZJsERLnGGQaiBGEXI4oNRwyAM1pEYDwBH4MGQjdqyJQAAAABJRU5ErkJggg==" width="32" height="32" alt="check"> image</p></div>
+  </div>
+  <div class="row"><div class="fixed">fixed 120px</div><div class="grow">flex: 1</div><div class="grow">flex: 1</div></div>
+  <div class="centered">Centered box, 60% wide</div>
+  <div class="sides">Top and bottom borders only</div>
+  <div class="keep"><h3>Keep together</h3><p>This block must not split across pages.</p></div>
+  <div class="pb"><h2>Second page</h2><p>Forced by page-break-before.</p>
+    <div style="background: rgba(52, 152, 219, 0.2); padding: 2em">Semi-transparent background</div>
+  </div>
+</body></html>

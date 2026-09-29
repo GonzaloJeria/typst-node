@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head><style>
+  @page { size: A4; margin: 18mm 15mm }
+  body { font-family: serif; font-size: 10pt; color: #222 }
+  header { display: flex; }
+  header .brand { flex: 1 }
+  h1 { color: #0a3d62; margin: 0 0 4px }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0 }
+  .box { border: 1px solid #ccc; border-radius: 4px; padding: 8px; break-inside: avoid }
+  table { width: 100% }
+  th, td { border: 0.5pt solid #999; padding: 4px }
+  th { background: #f0f3f7 }
+  tbody tr:nth-child(even) td { background: #fafafa }
+  .num { text-align: right }
+  .total { text-align: right; font-size: 12pt; font-weight: bold }
+  .legal { page-break-before: always; font-size: 8pt; text-align: justify }
+</style></head>
+<body>
+  <header>
+    <div class="brand"><h1>Factura N° 2026-001 <small>(borrador)</small></h1></div>
+    <div><img src="assets/logo.svg" alt="ACME" width="120" height="40"></div>
+  </header>
+  <div class="meta">
+    <div class="box"><strong>Emisor</strong><br>ACME S.A. <em>#1 en "calidad"</em><br>RUT 76.000.000-0</div>
+    <div class="box"><strong>Cliente</strong><br>Ada &amp; Co. &lt;ada@example.com&gt;<br>Santiago</div>
+  </div>
+  <table>
+    <thead><tr><th style="width: 50%">Descripción</th><th>Cant.</th><th>Precio</th><th>Total</th></tr></thead>
+    <tbody>
+      <tr><td>Servicio *premium* con $variables$ y #hashtags</td><td class="num">1</td><td class="num">$100</td><td class="num">$100</td></tr>
+      <tr><td rowspan="2">Licencias [anual]</td><td class="num">2</td><td class="num">$50</td><td class="num">$100</td></tr>
+      <tr><td colspan="2" class="num">Descuento</td><td class="num">-$10</td></tr>
+    </tbody>
+    <tfoot><tr><td colspan="3" class="num">Total</td><td class="num"><b>$190</b></td></tr></tfoot>
+  </table>
+  <p class="total">Total a pagar: $190</p>
+  <ul><li>Pago a 30 días</li><li>Transferencia a <a href="https://example.com/pay?a=1&b=2">example.com</a></li></ul>
+  <section class="legal"><h2>Términos</h2><p>Lorem ipsum \ dolor // sit @amet &lt;label&gt;. Este documento se rige por las condiciones generales de contratación vigentes a la fecha de emisión, las que el cliente declara conocer y aceptar íntegramente.</p></section>
+</body></html>

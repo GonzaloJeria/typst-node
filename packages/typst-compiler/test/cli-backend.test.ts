@@ -75,6 +75,18 @@ describe.skipIf(!hasTypst)("CliBackend (official typst binary)", () => {
     await expect(backend.compile({ source: "", inputs: { "a=b": "x" } })).rejects.toThrow(TypeError);
   });
 
+  it("renders pages to PNG and SVG in page order", async () => {
+    const source = "#set page(width: 2cm, height: 2cm)\nuno #pagebreak() dos #pagebreak() tres";
+    const png = await backend.compilePages({ source, format: "png", ppi: 72 });
+    expect(png.pages).toHaveLength(3);
+    for (const page of png.pages) expect(Buffer.from(page.subarray(1, 4)).toString("latin1")).toBe("PNG");
+    // 2cm at 72 ppi ≈ 57 px wide (IHDR width at byte 16).
+    expect(Buffer.from(png.pages[0]!).readUInt32BE(16)).toBe(57);
+    const svg = await backend.compilePages({ source, format: "svg" });
+    expect(svg.pages).toHaveLength(3);
+    expect(Buffer.from(svg.pages[2]!).toString("utf8")).toContain("<svg");
+  });
+
   it("reports compile errors with parsed diagnostics", async () => {
     const err = await backend.compile({ source: "ok\n#unknown_fn()" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(TypstCompileError);

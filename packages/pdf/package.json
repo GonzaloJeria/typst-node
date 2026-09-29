@@ -1,5 +1,5 @@
 {
-  "name": "typst-compiler",
+  "name": "typst-html-pdf",
   "version": "0.0.0",
   "type": "module",
   "license": "MIT",
@@ -29,5 +29,12 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "html-to-typst": "workspace:^",
+    "typst-compiler": "workspace:^"
+  },
+  "devDependencies": {
+    "parse5": "^8.0.1"
   }
 }

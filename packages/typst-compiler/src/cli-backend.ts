@@ -1,4 +1,6 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { mkdir, readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import { availableParallelism } from "node:os";
 import { performance } from "node:perf_hooks";
 import { parseDiagnostics } from "./diagnostics.js";
@@ -10,8 +12,25 @@ import {
   TypstTimeoutError,
 } from "./errors.js";
 import { Semaphore } from "./semaphore.js";
-import type { CompileRequest, CompileResult, FontSource, TypstBackend } from "./types.js";
-import { materializeProject } from "./vfs.js";
+import type {
+  CompileRequest,
+  CompileResult,
+  Diagnostic,
+  FontSource,
+  PagesRequest,
+  PagesResult,
+  TypstBackend,
+} from "./types.js";
+import { materializeProject, OUTPUT_DIR } from "./vfs.js";
+
+/** Where the CLI writes its output: stdout for a PDF, a file template for pages. */
+type Output = { format: "pdf" } | { format: "png" | "svg"; template: string; ppi?: number };
+
+interface RunResult {
+  stdout: Buffer;
+  warnings: Diagnostic[];
+  durationMs: number;
+}
 
 export interface CliBackendOptions {
   /** Path to the official `typst` binary. Default: `$TYPST_PATH` or `typst` on PATH. */
@@ -79,6 +98,30 @@ export class CliBackend implements TypstBackend {
   }
 
   async compile(request: CompileRequest): Promise<CompileResult> {
+    return this.#withProject(request, async (root, fontDirs) => {
+      const { stdout, warnings, durationMs } = await this.#run(request, root, fontDirs, { format: "pdf" });
+      return { pdf: new Uint8Array(stdout), warnings, durationMs };
+    });
+  }
+
+  async compilePages(request: PagesRequest): Promise<PagesResult> {
+    if (request.format !== "png" && request.format !== "svg") {
+      throw new TypeError(`Unsupported page format: ${String(request.format)}`);
+    }
+    return this.#withProject(request, async (root, fontDirs) => {
+      const outDir = path.join(root, OUTPUT_DIR);
+      await mkdir(outDir);
+      const template = path.join(outDir, `page-{0p}.${request.format}`);
+      const output: Output = { format: request.format, template, ...(request.ppi ? { ppi: request.ppi } : {}) };
+      const { warnings, durationMs } = await this.#run(request, root, fontDirs, output);
+      // Zero-padded page numbers make lexical order the page order.
+      const files = (await readdir(outDir)).sort();
+      const pages = await Promise.all(files.map(async (f) => new Uint8Array(await readFile(path.join(outDir, f)))));
+      return { pages, warnings, durationMs };
+    });
+  }
+
+  async #withProject<T>(request: CompileRequest, fn: (root: string, fontDirs: string[]) => Promise<T>): Promise<T> {
     if (this.#disposed) throw new TypstDisposedError();
     for (const key of Object.keys(request.inputs ?? {})) {
       if (!INPUT_KEY.test(key)) throw new TypeError(`Invalid input key: ${JSON.stringify(key)}`);
@@ -92,7 +135,7 @@ export class CliBackend implements TypstBackend {
         this.#opts.tmpDir,
       );
       try {
-        return await this.#run(request, project.root, project.fontDirs);
+        return await fn(project.root, project.fontDirs);
       } finally {
         await project.cleanup();
       }
@@ -107,9 +150,10 @@ export class CliBackend implements TypstBackend {
     for (const child of this.#running) child.kill("SIGKILL");
   }
 
-  #args(request: CompileRequest, root: string, fontDirs: string[]): string[] {
+  #args(request: CompileRequest, root: string, fontDirs: string[], output: Output): string[] {
     const o = this.#opts;
-    const args = ["compile", "--format", "pdf", "--diagnostic-format", "short", "--root", root];
+    const args = ["compile", "--format", output.format, "--diagnostic-format", "short", "--root", root];
+    if (output.format === "png" && output.ppi !== undefined) args.push("--ppi", String(output.ppi));
     args.push("--jobs", String(o.jobsPerCompilation ?? 1));
     if (o.ignoreSystemFonts ?? true) args.push("--ignore-system-fonts");
     if (o.ignoreEmbeddedFonts) args.push("--ignore-embedded-fonts");
@@ -120,19 +164,19 @@ export class CliBackend implements TypstBackend {
     for (const [key, value] of Object.entries(request.inputs ?? {})) {
       args.push("--input", `${key}=${value}`);
     }
-    args.push("-", "-");
+    args.push("-", output.format === "pdf" ? "-" : output.template);
     return args;
   }
 
-  #run(request: CompileRequest, root: string, fontDirs: string[]): Promise<CompileResult> {
+  #run(request: CompileRequest, root: string, fontDirs: string[], output: Output): Promise<RunResult> {
     const timeoutMs = request.timeoutMs ?? this.#opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const signal = request.signal;
     const started = performance.now();
 
-    return new Promise<CompileResult>((resolve, reject) => {
+    return new Promise<RunResult>((resolve, reject) => {
       if (signal?.aborted) return reject(new TypstAbortError());
 
-      const child = spawn(this.#binary, this.#args(request, root, fontDirs), {
+      const child = spawn(this.#binary, this.#args(request, root, fontDirs, output), {
         cwd: root,
         stdio: ["pipe", "pipe", "pipe"],
         // Keep the environment from redirecting roots/fonts behind our back.
@@ -180,7 +224,7 @@ export class CliBackend implements TypstBackend {
         if (code !== 0) return reject(new TypstCompileError(diagnostics, errText, code));
 
         resolve({
-          pdf: new Uint8Array(Buffer.concat(stdout)),
+          stdout: Buffer.concat(stdout),
           warnings: diagnostics.filter((d) => d.severity === "warning"),
           durationMs: performance.now() - started,
         });

@@ -10,7 +10,7 @@ describe("resolveInside", () => {
     expect(resolveInside(root, name).startsWith(root + path.sep)).toBe(true);
   });
 
-  it.each(["", "../x", "a/../../x", "a//b", ".typst-fonts/x.ttf"])("rejects %j", (name) => {
+  it.each(["", "../x", "a/../../x", "a//b", ".typst-fonts/x.ttf", ".typst-out/page-1.png"])("rejects %j", (name) => {
     expect(() => resolveInside(root, name)).toThrow(TypeError);
   });
 });

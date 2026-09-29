@@ -152,6 +152,14 @@ describe("tables", () => {
     expect(t.header![0]!.cells[0]).toMatchObject({ align: "center", children: [{ kind: "styled-block", style: { weight: "bold" } }] });
   });
 
+  it("keeps multi-row th headers together so header rowspans survive", () => {
+    const t = table(`<tr><th rowspan="2">R</th><th colspan="2">Y</th></tr><tr><th>a</th><th>b</th></tr><tr><td>1</td><td>2</td><td>3</td></tr>`);
+    expect(t.header).toHaveLength(2);
+    expect(t.header![0]!.cells[0]).toMatchObject({ rowspan: 2 });
+    expect(t.body).toHaveLength(1);
+    expect(t.columns).toHaveLength(3);
+  });
+
   it("derives column widths, stroke, inset and fills", () => {
     const t = body(
       `<table style="width: 100%"><colgroup><col style="width: 30%"><col></colgroup>

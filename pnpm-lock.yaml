@@ -30,6 +30,19 @@ importers:
         specifier: ^8.0.1
         version: 8.0.1
 
+  packages/pdf:
+    dependencies:
+      html-to-typst:
+        specifier: workspace:^
+        version: link:../html-to-typst
+      typst-compiler:
+        specifier: workspace:^
+        version: link:../typst-compiler
+    devDependencies:
+      parse5:
+        specifier: ^8.0.1
+        version: 8.0.1
+
   packages/typst-compiler: {}
 
 packages:

@@ -11,6 +11,9 @@ export interface MaterializedProject {
 }
 
 const FONT_DIR = ".typst-fonts";
+/** Where page-image output is written; reserved like the font directory. */
+export const OUTPUT_DIR = ".typst-out";
+const RESERVED = [FONT_DIR, OUTPUT_DIR];
 
 /**
  * Writes the virtual file map (and in-memory fonts) into a fresh temporary
@@ -59,8 +62,9 @@ export function resolveInside(root: string, name: string): string {
   if (normalized === "" || normalized.split("/").some((seg) => seg === ".." || seg === "")) {
     throw new TypeError(`Invalid virtual file path: ${JSON.stringify(name)}`);
   }
-  if (normalized === FONT_DIR || normalized.startsWith(`${FONT_DIR}/`)) {
-    throw new TypeError(`Virtual file path uses reserved directory ${FONT_DIR}: ${name}`);
+  const top = normalized.split("/")[0]!;
+  if (RESERVED.includes(top)) {
+    throw new TypeError(`Virtual file path uses reserved directory ${top}: ${name}`);
   }
   const target = path.resolve(root, normalized);
   if (!target.startsWith(root + path.sep)) {

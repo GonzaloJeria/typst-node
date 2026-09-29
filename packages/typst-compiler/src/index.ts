@@ -4,6 +4,9 @@ export type {
   Diagnostic,
   DiagnosticSeverity,
   FontSource,
+  PageFormat,
+  PagesRequest,
+  PagesResult,
   TypstBackend,
 } from "./types.js";
 export { CliBackend, type CliBackendOptions } from "./cli-backend.js";

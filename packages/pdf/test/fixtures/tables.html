@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head><style>
+  @page { size: A5 landscape; margin: 10mm }
+  body { font-family: serif; font-size: 9pt }
+  table { width: 100%; margin-bottom: 12px }
+  th, td { border: 1px solid #555; padding: 3px }
+  th { background: #2c3e50; color: white }
+  .num { text-align: right }
+  tr:nth-child(odd) td { background-color: #f7f7f7 }
+</style></head>
+<body>
+  <h2>Spans</h2>
+  <table>
+    <tr><th rowspan="2">Region</th><th colspan="2">2025</th><th colspan="2">2026</th></tr>
+    <tr><th>H1</th><th>H2</th><th>H1</th><th>H2</th></tr>
+    <tr><td rowspan="3">Norte</td><td>1</td><td>2</td><td>3</td><td>4</td></tr>
+    <tr><td colspan="2">merged</td><td>5</td><td>6</td></tr>
+    <tr><td>7</td><td colspan="3" style="text-align:center">wide</td></tr>
+    <tr><td>Sur</td><td>8</td></tr>
+  </table>
+  <h2>Long table with repeated header</h2>
+  <table>
+    <colgroup><col style="width: 10%"><col><col style="width: 20%"><col style="width: 20%"></colgroup>
+    <thead><tr><th>#</th><th>Name</th><th>Amount</th><th>Status</th></tr></thead>
+    <tbody><tr><td>1</td><td>Item 1</td><td class="num">7.00</td><td>Activo</td></tr><tr><td>2</td><td>Item 2</td><td class="num">14.00</td><td>Activo</td></tr><tr><td>3</td><td>Item 3</td><td class="num">21.00</td><td>Inactivo</td></tr><tr><td>4</td><td>Item 4</td><td class="num">28.00</td><td>Activo</td></tr><tr><td>5</td><td>Item 5</td><td class="num">35.00</td><td>Activo</td></tr><tr><td>6</td><td>Item 6</td><td class="num">42.00</td><td>Inactivo</td></tr><tr><td>7</td><td>Item 7</td><td class="num">49.00</td><td>Activo</td></tr><tr><td>8</td><td>Item 8</td><td class="num">56.00</td><td>Activo</td></tr><tr><td>9</td><td>Item 9</td><td class="num">63.00</td><td>Inactivo</td></tr><tr><td>10</td><td>Item 10</td><td class="num">70.00</td><td>Activo</td></tr><tr><td>11</td><td>Item 11</td><td class="num">77.00</td><td>Activo</td></tr><tr><td>12</td><td>Item 12</td><td class="num">84.00</td><td>Inactivo</td></tr><tr><td>13</td><td>Item 13</td><td class="num">91.00</td><td>Activo</td></tr><tr><td>14</td><td>Item 14</td><td class="num">98.00</td><td>Activo</td></tr><tr><td>15</td><td>Item 15</td><td class="num">5.00</td><td>Inactivo</td></tr><tr><td>16</td><td>Item 16</td><td class="num">12.00</td><td>Activo</td></tr><tr><td>17</td><td>Item 17</td><td class="num">19.00</td><td>Activo</td></tr><tr><td>18</td><td>Item 18</td><td class="num">26.00</td><td>Inactivo</td></tr><tr><td>19</td><td>Item 19</td><td class="num">33.00</td><td>Activo</td></tr><tr><td>20</td><td>Item 20</td><td class="num">40.00</td><td>Activo</td></tr><tr><td>21</td><td>Item 21</td><td class="num">47.00</td><td>Inactivo</td></tr><tr><td>22</td><td>Item 22</td><td class="num">54.00</td><td>Activo</td></tr><tr><td>23</td><td>Item 23</td><td class="num">61.00</td><td>Activo</td></tr><tr><td>24</td><td>Item 24</td><td class="num">68.00</td><td>Inactivo</td></tr><tr><td>25</td><td>Item 25</td><td class="num">75.00</td><td>Activo</td></tr><tr><td>26</td><td>Item 26</td><td class="num">82.00</td><td>Activo</td></tr><tr><td>27</td><td>Item 27</td><td class="num">89.00</td><td>Inactivo</td></tr><tr><td>28</td><td>Item 28</td><td class="num">96.00</td><td>Activo</td></tr><tr><td>29</td><td>Item 29</td><td class="num">3.00</td><td>Activo</td></tr><tr><td>30</td><td>Item 30</td><td class="num">10.00</td><td>Inactivo</td></tr><tr><td>31</td><td>Item 31</td><td class="num">17.00</td><td>Activo</td></tr><tr><td>32</td><td>Item 32</td><td class="num">24.00</td><td>Activo</td></tr><tr><td>33</td><td>Item 33</td><td class="num">31.00</td><td>Inactivo</td></tr><tr><td>34</td><td>Item 34</td><td class="num">38.00</td><td>Activo</td></tr><tr><td>35</td><td>Item 35</td><td class="num">45.00</td><td>Activo</td></tr><tr><td>36</td><td>Item 36</td><td class="num">52.00</td><td>Inactivo</td></tr><tr><td>37</td><td>Item 37</td><td class="num">59.00</td><td>Activo</td></tr><tr><td>38</td><td>Item 38</td><td class="num">66.00</td><td>Activo</td></tr><tr><td>39</td><td>Item 39</td><td class="num">73.00</td><td>Inactivo</td></tr><tr><td>40</td><td>Item 40</td><td class="num">80.00</td><td>Activo</td></tr><tr><td>41</td><td>Item 41</td><td class="num">87.00</td><td>Activo</td></tr><tr><td>42</td><td>Item 42</td><td class="num">94.00</td><td>Inactivo</td></tr><tr><td>43</td><td>Item 43</td><td class="num">1.00</td><td>Activo</td></tr><tr><td>44</td><td>Item 44</td><td class="num">8.00</td><td>Activo</td></tr><tr><td>45</td><td>Item 45</td><td class="num">15.00</td><td>Inactivo</td></tr><tr><td>46</td><td>Item 46</td><td class="num">22.00</td><td>Activo</td></tr><tr><td>47</td><td>Item 47</td><td class="num">29.00</td><td>Activo</td></tr><tr><td>48</td><td>Item 48</td><td class="num">36.00</td><td>Inactivo</td></tr><tr><td>49</td><td>Item 49</td><td class="num">43.00</td><td>Activo</td></tr><tr><td>50</td><td>Item 50</td><td class="num">50.00</td><td>Activo</td></tr><tr><td>51</td><td>Item 51</td><td class="num">57.00</td><td>Inactivo</td></tr><tr><td>52</td><td>Item 52</td><td class="num">64.00</td><td>Activo</td></tr><tr><td>53</td><td>Item 53</td><td class="num">71.00</td><td>Activo</td></tr><tr><td>54</td><td>Item 54</td><td class="num">78.00</td><td>Inactivo</td></tr><tr><td>55</td><td>Item 55</td><td class="num">85.00</td><td>Activo</td></tr><tr><td>56</td><td>Item 56</td><td class="num">92.00</td><td>Activo</td></tr><tr><td>57</td><td>Item 57</td><td class="num">99.00</td><td>Inactivo</td></tr><tr><td>58</td><td>Item 58</td><td class="num">6.00</td><td>Activo</td></tr><tr><td>59</td><td>Item 59</td><td class="num">13.00</td><td>Activo</td></tr><tr><td>60</td><td>Item 60</td><td class="num">20.00</td><td>Inactivo</td></tr></tbody>
+  </table>
+</body></html>

@@ -46,8 +46,26 @@ export interface CompileResult {
   durationMs: number;
 }
 
+export type PageFormat = "png" | "svg";
+
+export interface PagesRequest extends CompileRequest {
+  format: PageFormat;
+  /** Pixels per inch for PNG output. Default: 144. */
+  ppi?: number;
+}
+
+export interface PagesResult {
+  /** One PNG or SVG per page, in page order. */
+  pages: Uint8Array[];
+  warnings: Diagnostic[];
+  durationMs: number;
+}
+
 export interface TypstBackend {
+  /** Compiles to a PDF. */
   compile(request: CompileRequest): Promise<CompileResult>;
+  /** Renders every page to an image (previews, thumbnails, visual tests). */
+  compilePages(request: PagesRequest): Promise<PagesResult>;
   /** Rejects queued work, kills in-flight work and releases resources. */
   dispose(): Promise<void>;
 }
