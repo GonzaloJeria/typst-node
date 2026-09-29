@@ -1,9 +1,9 @@
 import { Cascade, type ComputedStyle, type PseudoElement } from "./css/cascade.js";
 import { checkDeclaration } from "./css/support.js";
-import { parseColor, parseGradient, parseLength, splitValue, withAlpha, type LengthContext } from "./css/values.js";
+import { parseColor, parseGradient, parseLength, parseShadows, parseTransform, splitValue, withAlpha, type LengthContext } from "./css/values.js";
 import { attr, isElement, isText, type Element, type Node } from "./dom.js";
 import type {
-  Block, BoxStyle, Color, HAlign, Inline, InlineBoxStyle, Length, Paint, Sides, Size, Stroke, TableCell, TableRow, TextStyle,
+  Block, BoxStyle, Color, HAlign, Inline, InlineBoxStyle, Length, Paint, Sides, Size, Stroke, TableCell, TableRow, TextStyle, TransformOp,
 } from "./ir.js";
 
 export interface ConvertOptions {
@@ -27,6 +27,10 @@ export class Converter {
   readonly warnings = new Set<string>();
   readonly #generics: NonNullable<ConvertOptions["genericFamilies"]>;
   readonly #styles = new WeakMap<Element, ComputedStyle>();
+  /** `position: fixed` content, repeated on every page. */
+  readonly foreground: Block[] = [];
+  /** `position: running(name)` elements, for `@page` margin boxes. */
+  readonly running = new Map<string, Block[]>();
 
   constructor(readonly cascade: Cascade, options: ConvertOptions = {}) {
     this.#generics = { ...DEFAULT_GENERICS, ...options.genericFamilies };
@@ -125,10 +129,29 @@ export class Converter {
       content = this.blocks(el, style);
     }
 
-    content = this.#applyBox(el, style, content);
+    const position = style.own.get("position") ?? "static";
+    const positioned = position === "relative" || position === "absolute" || position === "fixed";
+    content = this.#applyBox(el, style, content, positioned);
 
     const textDiff = this.#textDiff(style, parent);
     if (textDiff) content = [{ kind: "styled-block", style: textDiff, children: content }];
+
+    const ops = parseTransform(style.own.get("transform") ?? "none", lengthContext(style)) ?? [];
+    const offset = position === "relative" ? this.#relativeOffset(style) : undefined;
+    if (offset) ops.unshift(offset);
+    if (ops.length) content = [{ kind: "transform", ops, children: content }];
+
+    const running = /^running\(\s*([-\w]+)\s*\)$/.exec(position);
+    if (running) {
+      if (!this.running.has(running[1]!)) this.running.set(running[1]!, content);
+      return [];
+    }
+    if (position === "absolute" || position === "fixed") {
+      const placed = this.#place(style, content);
+      if (position === "absolute") return [placed];
+      this.foreground.push(placed);
+      return [];
+    }
 
     const before = style.props.get("break-before");
     const after = style.props.get("break-after");
@@ -137,7 +160,35 @@ export class Converter {
     return content;
   }
 
-  #applyBox(el: Element, s: ComputedStyle, content: Block[]): Block[] {
+  /** `position: relative` offsets: a visual shift that leaves layout untouched. */
+  #relativeOffset(s: ComputedStyle): TransformOp | undefined {
+    const ctx = lengthContext(s);
+    const get = (side: string) => {
+      const l = parseLength(s.own.get(side) ?? "", ctx);
+      return l && l.unit !== "%" ? l.value : undefined;
+    };
+    const unit = (value: number): Length => ({ value, unit: "pt" });
+    const [top, bottom, left, right] = [get("top"), get("bottom"), get("left"), get("right")];
+    const dx = left ?? (right !== undefined ? -right : 0);
+    const dy = top ?? (bottom !== undefined ? -bottom : 0);
+    return dx || dy ? { kind: "translate", dx: unit(dx), dy: unit(dy) } : undefined;
+  }
+
+  /** Anchors out-of-flow content to the corner implied by top/right/bottom/left. */
+  #place(s: ComputedStyle, children: Block[]): Block {
+    const ctx = lengthContext(s);
+    const len = (side: string) => {
+      const l = parseLength(s.own.get(side) ?? "", ctx);
+      return l && l.unit !== "%" ? l : undefined;
+    };
+    const zero: Length = { value: 0, unit: "pt" };
+    const [top, right, bottom, left] = [len("top"), len("right"), len("bottom"), len("left")];
+    const x = left === undefined && right !== undefined ? "right" : "left";
+    const y = top === undefined && bottom !== undefined ? "bottom" : "top";
+    return { kind: "place", x, y, dx: (x === "left" ? left : right) ?? zero, dy: (y === "top" ? top : bottom) ?? zero, children };
+  }
+
+  #applyBox(el: Element, s: ComputedStyle, content: Block[], positioned = false): Block[] {
     const ctx = lengthContext(s);
     const box: BoxStyle = {};
     const p = s.props;
@@ -163,10 +214,18 @@ export class Converter {
     if (below && below.unit !== "%") box.below = below;
     if (p.get("break-inside") === "avoid" || p.get("break-inside") === "avoid-page") box.breakable = false;
     if (p.get("margin-left") === "auto") box.align = p.get("margin-right") === "auto" ? "center" : "right";
+    const shadows = parseShadows(s.own.get("box-shadow") ?? "none", ctx);
+    if (shadows?.length) box.shadows = shadows;
 
-    if (Object.keys(box).length === 0) return content;
+    // A positioned element is the containing block of its absolute children,
+    // so it needs a block of its own even without visible styles.
+    if (Object.keys(box).length === 0) return positioned ? [{ kind: "box", style: box, children: content }] : content;
     // CSS blocks stretch to the container; make that visible when the box is.
-    if (!box.width && !box.align && (box.fill || box.stroke) && el.tagName !== "table") box.width = { value: 100, unit: "%" };
+    // Absolutely positioned boxes shrink to fit instead.
+    const outOfFlow = /^(absolute|fixed)$/.test(s.own.get("position") ?? "");
+    if (!box.width && !box.align && !outOfFlow && (box.fill || box.stroke || box.shadows) && el.tagName !== "table") {
+      box.width = { value: 100, unit: "%" };
+    }
     // Tables and images carry their own width; keep them as the box body.
     return [{ kind: "box", style: box, children: content }];
   }
@@ -314,6 +373,15 @@ export class Converter {
 
     const box = this.#inlineBox(style);
     if (box && children.length) wrap({ kind: "box", style: box, children });
+
+    // Block-level effects are not translated for inline content: say so.
+    const where = tag || "::pseudo";
+    for (const prop of ["transform", "box-shadow"]) {
+      const v = style.own.get(prop);
+      if (v && v !== "none") this.warnings.add(`Unsupported CSS ignored on inline element: ${prop}: ${v} (<${where}>)`);
+    }
+    const offset = style.own.get("position") === "relative" ? this.#relativeOffset(style) : undefined;
+    if (offset?.kind === "translate" && children.length) wrap({ kind: "move", dx: offset.dx, dy: offset.dy, children });
     return children;
   }
 
@@ -424,7 +492,10 @@ export class Converter {
     if (footer.length) block.footer = footer;
 
     const border = Number(attr(el, "border"));
-    const cellStroke = firstCell && firstStroke(firstCell.style, lengthContext(firstCell.style));
+    const cellCtx = firstCell && lengthContext(firstCell.style);
+    const cellSides = firstCell && sides((side) => borderStroke(firstCell!.style.props, side, cellCtx!));
+    const same = cellSides && (["top", "right", "bottom", "left"] as const).map((k) => JSON.stringify(cellSides[k]));
+    const cellStroke = same && same.every((v) => v === same[0]) && cellSides.top ? cellSides.top : cellSides;
     block.stroke = cellStroke ?? firstStroke(style, ctx) ?? (border > 0 ? { width: { value: 0.75, unit: "pt" }, color: "#000000" } : null);
 
     const pad = firstCell && parseLength(firstCell.style.props.get("padding-top") ?? "", lengthContext(firstCell.style));
@@ -656,6 +727,8 @@ function clampSpan(value: string | undefined, max: number): number {
 function displayOf(el: Element, s: ComputedStyle): "none" | "inline" | "block" | "flex" | "grid" {
   const d = s.props.get("display");
   if (d === "none") return "none";
+  // Out-of-flow and running elements are blockified, as in CSS.
+  if (/^(absolute|fixed|running\()/.test(s.own.get("position") ?? "")) return d === "flex" || d === "grid" ? d : "block";
   if (d === "inline" || d === "inline-block" || d === "inline-flex") return "inline";
   if (d === "flex" || d === "grid") return d;
   if (d) return "block";

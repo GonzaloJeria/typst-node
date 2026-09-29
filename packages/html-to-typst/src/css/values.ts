@@ -1,4 +1,4 @@
-import type { Color, Gradient, GradientStop, Length } from "../ir.js";
+import type { Color, Gradient, GradientStop, Length, Shadow, TransformOp } from "../ir.js";
 
 /** Context needed to turn relative CSS units into absolute ones. */
 export interface LengthContext {
@@ -265,4 +265,69 @@ function splitArgs(s: string): string[] {
   }
   if (cur.trim()) out.push(cur.trim());
   return out;
+}
+
+function parseAngle(v: string): number | undefined {
+  const m = /^(-?\d*\.?\d+)(deg|turn|rad|grad)?$/.exec(v.trim().toLowerCase());
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  if (!m[2]) return n === 0 ? 0 : undefined;
+  return m[2] === "turn" ? n * 360 : m[2] === "rad" ? (n * 180) / Math.PI : m[2] === "grad" ? n * 0.9 : n;
+}
+
+/**
+ * Parses a `transform` list into operations, outermost first. Returns
+ * undefined for anything unsupported (skew, matrix, 3D, % translations).
+ */
+export function parseTransform(value: string, ctx: LengthContext): TransformOp[] | undefined {
+  const v = value.trim();
+  if (v === "none") return [];
+  const ops: TransformOp[] = [];
+  const re = /([a-zA-Z]+)\(([^)]*)\)/g;
+  let consumed = "";
+  for (const m of v.matchAll(re)) {
+    consumed += m[0];
+    const fn = m[1]!.toLowerCase();
+    const args = m[2]!.split(",").map((a) => a.trim()).filter(Boolean);
+    const len = (a: string | undefined) => {
+      if (a === undefined) return { value: 0, unit: "pt" as const };
+      const l = parseLength(a, ctx);
+      return l && l.unit !== "%" ? l : undefined;
+    };
+    if (fn === "rotate" || fn === "rotatez") {
+      const deg = parseAngle(args[0] ?? "");
+      if (deg === undefined) return undefined;
+      ops.push({ kind: "rotate", deg });
+    } else if (fn === "scale" || fn === "scalex" || fn === "scaley") {
+      const nums = args.map(Number);
+      if (!nums.length || nums.some((n) => !Number.isFinite(n))) return undefined;
+      const x = fn === "scaley" ? 1 : nums[0]!;
+      const y = fn === "scalex" ? 1 : fn === "scaley" ? nums[0]! : nums[1] ?? nums[0]!;
+      ops.push({ kind: "scale", x, y });
+    } else if (fn === "translate" || fn === "translatex" || fn === "translatey") {
+      const a = len(fn === "translatey" ? undefined : args[0]);
+      const b = len(fn === "translatex" ? undefined : fn === "translatey" ? args[0] : args[1]);
+      if (!a || !b) return undefined;
+      ops.push({ kind: "translate", dx: a, dy: b });
+    } else return undefined;
+  }
+  if (consumed.replace(/\s+/g, "") !== v.replace(/\s+/g, "")) return undefined;
+  return ops;
+}
+
+/** Parses outer `box-shadow` layers; `inset` shadows make the value unsupported. */
+export function parseShadows(value: string, ctx: LengthContext): Shadow[] | undefined {
+  const v = value.trim();
+  if (v === "none") return [];
+  const layers: Shadow[] = [];
+  for (const layer of splitArgs(v)) {
+    const tokens = splitValue(layer);
+    if (tokens.some((t) => t.toLowerCase() === "inset")) return undefined;
+    const colorToken = tokens.find((t) => parseColor(t) !== undefined);
+    const lengths = tokens.filter((t) => t !== colorToken).map((t) => parseLength(t, ctx));
+    if (lengths.length < 2 || lengths.length > 4 || lengths.some((l) => !l || l.unit === "%")) return undefined;
+    const [dx, dy, blur = { value: 0, unit: "pt" as const }, spread = { value: 0, unit: "pt" as const }] = lengths as Length[];
+    layers.push({ dx: dx!, dy: dy!, blur, spread, color: parseColor(colorToken ?? "") ?? ("#00000040" as Color) });
+  }
+  return layers;
 }

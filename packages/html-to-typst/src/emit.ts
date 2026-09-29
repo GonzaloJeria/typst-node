@@ -1,4 +1,4 @@
-import type { Block, Document, Inline, Size, TableCell, TableRow, TextStyle } from "./ir.js";
+import type { Block, BoxStyle, Sides, Stroke, Document, Inline, MarginBand, MarginBox, Shadow, Size, TableCell, TableRow, TextStyle, TransformOp } from "./ir.js";
 import { align, call, color, length, num, paint, sides, size, str, stroke } from "./literals.js";
 
 /**
@@ -18,6 +18,10 @@ export function emitDocument(doc: Document): string {
           width: p.width && length(p.width),
           height: p.height && length(p.height),
           margin: p.margin && sides(p.margin, length),
+          fill: p.fill && paint(p.fill),
+          header: p.header && band(p.header),
+          footer: p.footer && band(p.footer),
+          foreground: p.foreground && blocks(p.foreground),
         }),
     );
   }
@@ -94,6 +98,12 @@ export function emitInline(node: Inline): string {
     }
     case "linebreak":
       return "linebreak()";
+    case "move":
+      return call("box", {}, call("move", { dx: length(node.dx), dy: length(node.dy) }, inlines(node.children)));
+    case "page-counter":
+      return node.which === "page"
+        ? "context counter(page).display()"
+        : "context str(counter(page).final().first())";
     case "image":
       return call("box", {}, imageCall(node));
   }
@@ -144,7 +154,7 @@ export function emitBlock(node: Block): string {
     }
     case "box": {
       const s = node.style;
-      const b = call(
+      let b = call(
         "block",
         {
           width: s.width && size(s.width),
@@ -158,8 +168,16 @@ export function emitBlock(node: Block): string {
         },
         blocks(node.children),
       );
+      if (s.shadows?.length) b = shadowed(b, s);
       return s.align ? `align(${align(s.align)}, ${b})` : b;
     }
+    case "place": {
+      const dx = node.x === "left" ? length(node.dx) : `-${length(node.dx)}`;
+      const dy = node.y === "top" ? length(node.dy) : `-${length(node.dy)}`;
+      return call("place", { dx, dy }, `${node.y} + ${node.x}`, blocks(node.children));
+    }
+    case "transform":
+      return transform(node.ops, blocks(node.children));
     case "styled-block":
       return call("text", textArgs(node.style), blocks(node.children));
     case "table": {
@@ -171,7 +189,14 @@ export function emitBlock(node: Block): string {
         "table",
         {
           columns: `(${node.columns.map(size).join(", ")}${node.columns.length === 1 ? "," : ""})`,
-          stroke: node.stroke === undefined ? undefined : node.stroke === null ? "none" : stroke(node.stroke),
+          stroke:
+            node.stroke === undefined
+              ? undefined
+              : node.stroke === null
+                ? "none"
+                : "width" in node.stroke
+                  ? stroke(node.stroke as Stroke)
+                  : tableSides(node.stroke),
           inset: node.inset && length(node.inset),
         },
         ...parts,
@@ -210,4 +235,74 @@ function cell(c: TableCell): string {
   };
   const body = blocks(c.children);
   return Object.values(named).some((v) => v !== undefined) ? call("table.cell", named, body) : body;
+}
+
+function transform(ops: TransformOp[], body: string): string {
+  // CSS applies the list right to left, so the first function is outermost.
+  return ops.reduceRight((inner, op) => {
+    switch (op.kind) {
+      case "rotate":
+        return call("rotate", { reflow: "false" }, `${num(op.deg)}deg`, inner);
+      case "scale":
+        return call("scale", { x: `${num(op.x * 100)}%`, y: `${num(op.y * 100)}%`, reflow: "false" }, inner);
+      case "translate":
+        return call("move", { dx: length(op.dx), dy: length(op.dy) }, inner);
+    }
+  }, body);
+}
+
+/** Blur is approximated by stacking progressively smaller translucent layers. */
+const BLUR_STEPS = 4;
+
+/**
+ * Paints `box-shadow` layers behind a block. Typst has no shadows, so the
+ * block is measured and translucent rounded rectangles are placed under it.
+ */
+function shadowed(block: string, style: BoxStyle): string {
+  const radius = style.radius ? length(style.radius) : "0pt";
+  const layers = (style.shadows ?? []).flatMap((sh: Shadow) => {
+    const steps = sh.blur.value > 0 ? BLUR_STEPS : 1;
+    return Array.from({ length: steps }, (_, i) => {
+      // Largest (outermost) layer first; each adds 1/steps of the opacity.
+      const k = steps === 1 ? 0 : (steps - i) / steps / 2;
+      const grow = `(${length(sh.spread)} + ${length(sh.blur)} * ${num(k)})`;
+      const color = steps === 1 ? sh.color : fade(sh.color, 1 / steps);
+      return `place(dx: ${length(sh.dx)} - ${grow}, dy: ${length(sh.dy)} - ${grow}, block(width: m.width + 2 * ${grow}, height: m.height + 2 * ${grow}, radius: ${radius} + ${grow}, fill: ${paint(color)}))`;
+    });
+  });
+  return [
+    "layout(size => {",
+    indent(`let body = ${block}`),
+    "  let m = measure(body, width: size.width)",
+    `  block(breakable: false, {\n${layers.map((l) => indent(indent(l))).join("\n")}\n    body\n  })`,
+    "})",
+  ].join("\n");
+}
+
+function fade(color: `#${string}`, factor: number): `#${string}` {
+  const alpha = color.length === 9 ? parseInt(color.slice(7), 16) : 255;
+  return `#${color.slice(1, 7)}${Math.round(alpha * factor).toString(16).padStart(2, "0")}`;
+}
+
+function marginBox(box: MarginBox | undefined): string {
+  if (!box) return "[]";
+  const body = box.blocks ? blocks(box.blocks) : inlines(box.inlines ?? []);
+  return box.style ? call("text", textArgs(box.style), body) : body;
+}
+
+/** `@page` margin boxes as a three-column band (left, center, right). */
+function band(b: MarginBand): string {
+  return call(
+    "grid",
+    { columns: "(1fr, auto, 1fr)", "column-gutter": "1em" },
+    `align(left + horizon, ${marginBox(b.left)})`,
+    `align(center + horizon, ${marginBox(b.center)})`,
+    `align(right + horizon, ${marginBox(b.right)})`,
+  );
+}
+
+/** Table stroke dictionaries default missing sides to a black rule, so name them all. */
+function tableSides(value: Sides<Stroke>): string {
+  const all = (["top", "right", "bottom", "left"] as const).map((k) => `${k}: ${value[k] ? stroke(value[k]!) : "none"}`);
+  return `(${all.join(", ")})`;
 }

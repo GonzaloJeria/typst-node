@@ -50,15 +50,16 @@ function htmlText(html: string): string {
 describe("content consistency (HTML text survives into the IR)", () => {
   it.each(fixtures)("%s", (file) => {
     const html = read(file);
-    // Generated content (::before, quotes) may add text and text-transform may
-    // change case, so the HTML text must appear, in order, within the IR text.
-    const ir = documentText(htmlToTypst(html).document).replace(/\s+/g, "").toLowerCase();
-    const source = htmlText(html).toLowerCase();
-    let at = 0;
-    for (const ch of source) {
-      at = ir.indexOf(ch, at);
-      expect(at, `"${ch}" from the HTML is missing in the IR text`).toBeGreaterThanOrEqual(0);
-      at++;
-    }
+    // Out-of-flow content (fixed, running headers) legitimately moves and
+    // generated content adds text, so compare character counts, not order:
+    // every character of the HTML text must still be present in the IR.
+    const count = (text: string) => {
+      const bag = new Map<string, number>();
+      for (const ch of text.toLowerCase().replace(/\s+/g, "")) bag.set(ch, (bag.get(ch) ?? 0) + 1);
+      return bag;
+    };
+    const ir = count(documentText(htmlToTypst(html).document));
+    const missing = [...count(htmlText(html))].filter(([ch, n]) => (ir.get(ch) ?? 0) < n);
+    expect(missing, "characters lost between HTML and IR").toEqual([]);
   });
 });

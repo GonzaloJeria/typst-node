@@ -1,11 +1,11 @@
 import { parse } from "parse5";
 import { Cascade } from "./css/cascade.js";
 import { parseStylesheet, type Declaration } from "./css/parse.js";
-import { expandBox, parseColor, parseLength, splitValue, type LengthContext } from "./css/values.js";
+import { expandBox, parseColor, parseFontSize, parseGradient, parseLength, splitValue, type LengthContext } from "./css/values.js";
 import { Converter, type ConvertOptions } from "./convert.js";
 import { attr, findAll, findFirst, isText } from "./dom.js";
 import { emitDocument } from "./emit.js";
-import type { Document, Length, PageSetup, TextStyle } from "./ir.js";
+import type { Block, Document, Inline, Length, MarginBand, MarginBox, PageSetup, Paint, TextStyle } from "./ir.js";
 
 export interface TranspileOptions extends ConvertOptions {
   /** Extra CSS applied after the document's own `<style>` elements. */
@@ -59,8 +59,17 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   if (color) text.fill = color;
 
   const document: Document = { text, children: converter.blocks(body, bodyStyle) };
-  const page = pageSetup(sheet.page, { fontSize: bodyStyle.fontSize, rootFontSize: cascade.rootFontSize }, converter.warnings);
-  if (page) document.page = page;
+  const ctx = { fontSize: bodyStyle.fontSize, rootFontSize: cascade.rootFontSize };
+  const page = pageSetup(sheet.page, ctx, converter.warnings) ?? {};
+  // Paged media paints the canvas with the root/body background.
+  const fill = page.fill ?? paintOf(bodyStyle.own) ?? paintOf(htmlStyle.own);
+  if (fill) page.fill = fill;
+  const bands = marginBands(sheet.pageBoxes, converter, bodyStyle.fontSize, cascade.rootFontSize);
+  if (bands.header) page.header = bands.header;
+  if (bands.footer) page.footer = bands.footer;
+  if (converter.foreground.length) page.foreground = converter.foreground;
+  if (Object.keys(page).length) document.page = page;
+  for (const w of sheet.warnings) converter.warnings.add(w);
   const lang = attr(htmlEl, "lang")?.split("-")[0]?.toLowerCase();
   if (lang && /^[a-z]{2,3}$/.test(lang)) document.lang = lang;
 
@@ -104,6 +113,11 @@ function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<strin
       if (ls && ls.every((l) => l && l.unit !== "%")) {
         page.margin = { top: ls[0]!, right: ls[1]!, bottom: ls[2]!, left: ls[3]! };
       }
+    } else if (/^background(-color|-image)?$/.test(d.property)) {
+      const fill = paintOf(new Map([[d.property === "background-color" ? "background-color" : "background-image", d.value]]))
+        ?? paintOf(new Map([["background-color", splitValue(d.value).find((t) => parseColor(t)) ?? ""]]));
+      if (fill) page.fill = fill;
+      else warnings.add(`Unsupported @page value ignored: ${d.property}: ${d.value}`);
     } else if (/^margin-(top|right|bottom|left)$/.test(d.property)) {
       const l = parseLength(d.value, ctx);
       if (l && l.unit !== "%") page.margin = { ...page.margin, [d.property.slice(7)]: l };
@@ -116,4 +130,76 @@ function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<strin
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function paintOf(props: ReadonlyMap<string, string>): Paint | undefined {
+  const gradient = parseGradient(props.get("background-image") ?? "");
+  if (gradient) return gradient;
+  const color = parseColor(props.get("background-color") ?? "");
+  return color && color !== "#00000000" ? color : undefined;
+}
+
+const BAND_SLOTS: Record<string, ["header" | "footer", keyof MarginBand]> = {
+  "top-left": ["header", "left"], "top-center": ["header", "center"], "top-right": ["header", "right"],
+  "bottom-left": ["footer", "left"], "bottom-center": ["footer", "center"], "bottom-right": ["footer", "right"],
+};
+
+/** Builds header/footer bands from `@page` margin boxes. */
+function marginBands(
+  boxes: Record<string, Declaration[]>,
+  converter: Converter,
+  bodySize: number,
+  rootSize: number,
+): { header?: MarginBand; footer?: MarginBand } {
+  const out: { header?: MarginBand; footer?: MarginBand } = {};
+  for (const [name, decls] of Object.entries(boxes)) {
+    const slot = BAND_SLOTS[name];
+    if (!slot) {
+      converter.warnings.add(`Unsupported @page margin box ignored: @${name}`);
+      continue;
+    }
+    const box = marginBox(decls, converter, bodySize, rootSize);
+    if (box) (out[slot[0]] ??= {})[slot[1]] = box;
+  }
+  return out;
+}
+
+function marginBox(decls: Declaration[], converter: Converter, bodySize: number, rootSize: number): MarginBox | undefined {
+  const get = (p: string) => decls.filter((d) => d.property === p).at(-1)?.value;
+  const content = get("content");
+  if (!content || content === "none" || content === "normal") return undefined;
+
+  const box: MarginBox = {};
+  const inlines: Inline[] = [];
+  let blocks: Block[] | undefined;
+  const re = /"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|counter\(\s*(page|pages)\s*\)|element\(\s*([-\w]+)\s*\)|(\S+\([^)]*\)|\S+)/g;
+  for (const m of content.matchAll(re)) {
+    const text = m[1] ?? m[2];
+    if (text !== undefined) inlines.push({ kind: "text", value: text.replace(/\\([0-9a-fA-F]{1,6})\s?|\\(.)/g, (_, h: string | undefined, c: string | undefined) => (h ? String.fromCodePoint(parseInt(h, 16)) : c!)) });
+    else if (m[3]) inlines.push({ kind: "page-counter", which: m[3] as "page" | "pages" });
+    else if (m[4]) {
+      blocks = converter.running.get(m[4]);
+      if (!blocks) converter.warnings.add(`No element with position: running(${m[4]}) for @page margin box`);
+    } else if (m[5]) converter.warnings.add(`Unsupported @page content value ignored: ${m[5]}`);
+  }
+  if (blocks) box.blocks = blocks;
+  else if (inlines.length) box.inlines = inlines;
+  else return undefined;
+
+  const style: TextStyle = {};
+  const color = parseColor(get("color") ?? "");
+  if (color) style.fill = color;
+  const size = get("font-size") && parseFontSize(get("font-size")!, bodySize, rootSize);
+  if (size) style.size = { value: round(size), unit: "pt" };
+  const weight = get("font-weight");
+  if (weight === "bold" || weight === "bolder") style.weight = "bold";
+  else if (weight && /^[1-9]00$/.test(weight)) style.weight = Number(weight);
+  if (get("font-style") === "italic") style.style = "italic";
+  const family = get("font-family");
+  if (family) {
+    const f = converter.fontFamily(family);
+    if (f.length) style.font = f;
+  }
+  if (Object.keys(style).length) box.style = style;
+  return box;
 }
