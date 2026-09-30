@@ -73,6 +73,8 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   "grid-template-columns": any,
   gap: any,
   "column-gap": any,
+  "column-count": (v) => v === "auto" || /^[1-9]\d?$/.test(v),
+  "column-fill": oneOf("balance", "auto"),
   "vertical-align": oneOf("baseline"),
   visibility: oneOf("visible"),
   "font-size-adjust": oneOf("none"),

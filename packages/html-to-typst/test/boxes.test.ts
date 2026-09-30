@@ -50,3 +50,34 @@ describe("background images", () => {
     expect(r.style.image?.fit).toBe("stretch");
   });
 });
+
+describe("multi-column", () => {
+  it("maps column-count and the columns shorthand", () => {
+    const a = htmlToTypst(`<div style="column-count: 3; column-gap: 5mm"><p>x</p></div>`);
+    expect(a.warnings).toEqual([]);
+    expect(a.document.children[0]).toMatchObject({ kind: "columns", count: 3, gutter: { value: 5, unit: "mm" } });
+    expect(a.source).toContain("columns(3, gutter: 5mm, body)");
+    const b = htmlToTypst(`<div style="columns: 2"><p>x</p></div>`);
+    expect(b.document.children[0]).toMatchObject({ kind: "columns", count: 2, gutter: { value: 1, unit: "em" } });
+  });
+
+  it("warns about column widths it cannot honour", () => {
+    const r = htmlToTypst(`<div style="columns: 2 10em"><p>x</p></div>`);
+    expect(r.warnings.some((w) => w.includes("column-width"))).toBe(true);
+  });
+});
+
+describe("@page background images", () => {
+  it("paints the image behind every page and collects the asset", () => {
+    const r = htmlToTypst(`<p>x</p>`, { css: `@page { background: #fafafa url(bg.svg) center / cover no-repeat }` });
+    expect(r.warnings).toEqual([]);
+    expect(r.document.page).toMatchObject({ fill: "#fafafa", image: { src: "bg.svg", fit: "cover" } });
+    expect(r.assets).toEqual(["bg.svg"]);
+    expect(r.source).toContain('background: block(width: 100%, height: 100%, align(center + horizon, image(width: 100%, height: 100%, fit: "cover", "bg.svg")))');
+  });
+
+  it("warns about repeated page backgrounds", () => {
+    const r = htmlToTypst(`<p>x</p>`, { css: `@page { background: url(bg.svg) repeat }` });
+    expect(r.warnings.some((w) => w.startsWith("Unsupported @page background"))).toBe(true);
+  });
+});

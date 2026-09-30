@@ -182,7 +182,7 @@ const BORDER_STYLES = new Set(["none", "hidden", "solid", "dashed", "dotted", "d
  * Expands shorthands into longhands at cascade time so later declarations
  * override earlier ones property by property, as in CSS.
  */
-function expandShorthand(property: string, value: string): [string, string][] {
+export function expandShorthand(property: string, value: string): [string, string][] {
   const alias = SHORTHAND_BREAKS[property];
   if (alias) return [[alias, value === "always" ? "page" : value]];
 
@@ -207,6 +207,14 @@ function expandShorthand(property: string, value: string): [string, string][] {
     if (position.length) out.push(["background-position", position.join(" ")]);
     rest = rest.filter((t) => !position.includes(t) && t !== "scroll" && !/^(?:border|padding)-box$/.test(t));
     if (rest.length) out.push(["background-other", rest.join(" ")]);
+    return out;
+  }
+  if (property === "columns") {
+    // `columns: <count> <width>?`: only the count maps onto Typst columns.
+    const tokens = splitValue(value);
+    const count = tokens.find((t) => /^\d+$/.test(t));
+    const out: [string, string][] = [["column-count", count ?? "auto"]];
+    if (tokens.some((t) => t !== count && t !== "auto")) out.push(["column-width", tokens.filter((t) => t !== count).join(" ")]);
     return out;
   }
   if (property === "margin" || property === "padding") {

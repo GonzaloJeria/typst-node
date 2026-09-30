@@ -150,6 +150,13 @@ export class Converter {
       content = this.#grid(el, style, display);
     } else {
       content = this.blocks(el, style);
+      const count = Number(style.own.get("column-count"));
+      if (count > 1) {
+        const gap = style.props.get("column-gap");
+        const gutter = gap && gap !== "normal" ? parseLength(gap, lengthContext(style)) : undefined;
+        // CSS `normal` gap is 1em.
+        content = [{ kind: "columns", count, gutter: gutter ?? { value: 1, unit: "em" }, children: content }];
+      }
     }
 
     const position = style.own.get("position") ?? "static";
@@ -895,7 +902,7 @@ function opacityOf(s: ComputedStyle): number {
 }
 
 /** Background paint: a gradient wins over the color layer, as it is painted on top. */
-function backgroundImage(p: ReadonlyMap<string, string>, ctx: LengthContext): BackgroundImage | undefined {
+export function backgroundImage(p: ReadonlyMap<string, string>, ctx: LengthContext): BackgroundImage | undefined {
   const src = parseUrl(p.get("background-image") ?? "");
   if (!src) return undefined;
   const sizeValue = p.get("background-size") ?? "auto";

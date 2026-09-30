@@ -12,6 +12,11 @@ export function mapImages(doc: Document, fn: (src: string) => string | null): vo
 }
 
 function mapPage(page: PageSetup, fn: (src: string) => string | null): void {
+  if (page.image) {
+    const src = fn(page.image.src);
+    if (src === null) delete page.image;
+    else page.image.src = src;
+  }
   if (page.foreground) page.foreground = mapBlocks(page.foreground, fn);
   for (const band of [page.header, page.footer, page.first?.header, page.first?.footer]) {
     for (const box of Object.values(band ?? {})) {
@@ -45,6 +50,7 @@ function mapBlocks(blocks: Block[], fn: (src: string) => string | null): Block[]
       case "place":
       case "transform":
       case "pad":
+      case "columns":
         b.children = mapBlocks(b.children, fn);
         return [b];
       case "page-run":
@@ -96,7 +102,7 @@ export function documentText(doc: Document): string {
       switch (b.kind) {
         case "paragraph": case "heading": inl(b.children); break;
         case "list": b.items.forEach(blk); break;
-        case "box": case "styled-block": case "place": case "transform": case "pad": blk(b.children); break;
+        case "box": case "styled-block": case "place": case "transform": case "pad": case "columns": blk(b.children); break;
         case "grid": b.cells.forEach(blk); break;
         case "page-run":
           bandBlocks(b.page?.header);
