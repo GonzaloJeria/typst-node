@@ -1,5 +1,5 @@
 {
-  "name": "typst-html-pdf",
+  "name": "@gjeria/typst-html-pdf",
   "version": "0.1.0",
   "description": "HTML/CSS to PDF in Node.js without Chromium, powered by Typst.",
   "keywords": [
@@ -51,8 +51,8 @@
     "bench": "node bench.mjs"
   },
   "dependencies": {
-    "html-to-typst": "workspace:^",
-    "typst-compiler": "workspace:^"
+    "@gjeria/html-to-typst": "workspace:^",
+    "@gjeria/typst-compiler": "workspace:^"
   },
   "devDependencies": {
     "parse5": "^8.0.1"

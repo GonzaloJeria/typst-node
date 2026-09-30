@@ -1,5 +1,5 @@
 {
-  "name": "html-to-typst",
+  "name": "@gjeria/html-to-typst",
   "version": "0.1.0",
   "description": "Transpile HTML and CSS (cascade, paged media, tables, flex/grid, backgrounds, columns) to Typst source.",
   "keywords": [

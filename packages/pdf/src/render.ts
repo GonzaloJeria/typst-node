@@ -1,14 +1,15 @@
-import { composeToTypst, htmlToTypst, mapImages, emitDocument, type ComposeInput, type TranspileOptions } from "html-to-typst";
+import { composeToTypst, htmlToTypst, mapImages, emitDocument, type ComposeInput, type TranspileOptions } from "@gjeria/html-to-typst";
 import {
   CliBackend,
   SidecarBackend,
+  resolveSidecarBinary,
   type CliBackendOptions,
   type SidecarBackendOptions,
   type Diagnostic,
   type FontSource,
   type PageFormat,
   type TypstBackend,
-} from "typst-compiler";
+} from "@gjeria/typst-compiler";
 import { resolveAssets, type AssetOptions } from "./assets.js";
 
 export interface RenderOptions extends TranspileOptions {
@@ -45,12 +46,13 @@ export type RenderInput = string | ComposeInput;
 export interface PdfRendererOptions {
   /** Backend to use; defaults to a `CliBackend` owned by the renderer. */
   backend?: TypstBackend;
-  /** Options for the default `CliBackend`. Ignored when `backend` or `sidecar` is given. */
-  cli?: CliBackendOptions;
   /**
-   * Use long-lived `typst-sidecar` processes instead of one `typst` process
-   * per document (several times faster). `true` uses the defaults.
+   * Use the official `typst` CLI (one process per document) with these
+   * options. By default the renderer uses the prebuilt `typst-sidecar`
+   * installed with the package, and falls back to the CLI without it.
    */
+  cli?: CliBackendOptions;
+  /** Options for the default `SidecarBackend` (long-lived Typst processes). */
   sidecar?: SidecarBackendOptions | true;
   /** Defaults merged into every render call. */
   defaults?: RenderOptions;
@@ -63,9 +65,7 @@ export class PdfRenderer {
   readonly #defaults: RenderOptions;
 
   constructor(options: PdfRendererOptions = {}) {
-    this.backend =
-      options.backend ??
-      (options.sidecar ? new SidecarBackend(options.sidecar === true ? {} : options.sidecar) : new CliBackend(options.cli));
+    this.backend = options.backend ?? defaultBackend(options);
     this.#owned = options.backend === undefined;
     this.#defaults = options.defaults ?? {};
   }
@@ -114,6 +114,13 @@ export class PdfRenderer {
       ...(d.css && options.css ? { css: `${d.css}\n${options.css}` } : {}),
     };
   }
+}
+
+function defaultBackend(options: PdfRendererOptions): TypstBackend {
+  if (options.cli && !options.sidecar) return new CliBackend(options.cli);
+  const sidecar = options.sidecar === true ? {} : options.sidecar ?? {};
+  if (options.sidecar || sidecar.binaryPath || resolveSidecarBinary()) return new SidecarBackend(sidecar);
+  return new CliBackend();
 }
 
 async function prepare(input: RenderInput, opts: RenderOptions): Promise<Prepared> {

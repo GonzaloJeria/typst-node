@@ -11,6 +11,7 @@ export type {
 } from "./types.js";
 export { CliBackend, type CliBackendOptions } from "./cli-backend.js";
 export { SidecarBackend, type SidecarBackendOptions } from "./sidecar-backend.js";
+export { resolveSidecarBinary } from "./sidecar-binary.js";
 export {
   TypstAbortError,
   TypstBinaryError,

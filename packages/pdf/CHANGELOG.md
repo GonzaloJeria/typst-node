@@ -1,4 +1,4 @@
-# typst-html-pdf
+# @gjeria/typst-html-pdf
 
 ## 0.1.0
 
@@ -15,5 +15,5 @@
 - Updated dependencies [277f7a7]
 - Updated dependencies [3b57733]
 - Updated dependencies [27fe5c0]
-  - html-to-typst@0.1.0
-  - typst-compiler@0.1.0
+  - @gjeria/html-to-typst@0.1.0
+  - @gjeria/typst-compiler@0.1.0

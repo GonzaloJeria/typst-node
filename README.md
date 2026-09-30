@@ -4,10 +4,10 @@ Generación de PDF en Node.js sin navegador: HTML/CSS → Typst → PDF.
 
 | Paquete | Estado |
 |---|---|
-| [`typst-compiler`](packages/typst-compiler) | `TypstBackend` + `CliBackend` (binario oficial de Typst por documento) + `SidecarBackend` (procesos Typst persistentes); cero dependencias de runtime |
-| [`typst-html-pdf`](packages/pdf) | Fachada `htmlToPdf()` / `PdfRenderer`: transpila, resuelve imágenes (data URI, archivos locales acotados a `baseDir`, HTTP con protección SSRF) y compila |
+| [`@gjeria/typst-compiler`](packages/typst-compiler) | `TypstBackend` + `CliBackend` (binario oficial de Typst por documento) + `SidecarBackend` (procesos Typst persistentes); cero dependencias de runtime |
+| [`@gjeria/typst-html-pdf`](packages/pdf) | Fachada `htmlToPdf()` / `PdfRenderer`: transpila, resuelve imágenes (data URI, archivos locales acotados a `baseDir`, HTTP con protección SSRF) y compila |
 | [`typst-sidecar`](crates/typst-sidecar) | Binario Rust propio sobre los crates oficiales de Typst: compila por JSON sobre stdin/stdout sin reiniciar entre documentos |
-| [`html-to-typst`](packages/html-to-typst) | HTML/CSS → IR → Typst: parse5, cascada CSS propia (selectores, especificidad, herencia, shorthands, `@page`, `@media print`), tablas con rowspan/colspan, flex/grid básicos, saltos de página |
+| [`@gjeria/html-to-typst`](packages/html-to-typst) | HTML/CSS → IR → Typst: parse5, cascada CSS propia (selectores, especificidad, herencia, shorthands, `@page`, `@media print`), tablas con rowspan/colspan, flex/grid básicos, saltos de página |
 
 ## Requisitos
 
@@ -24,7 +24,7 @@ pnpm build       # tsup → ESM + CJS + .d.ts
 ## Uso
 
 ```ts
-import { PdfRenderer } from "typst-html-pdf";
+import { PdfRenderer } from "@gjeria/typst-html-pdf";
 
 const renderer = new PdfRenderer({
   defaults: {
@@ -44,24 +44,24 @@ en cada salto, y hay límites de tamaño y timeout.
 
 ### Backends: CLI o sidecar
 
-| | `CliBackend` (por defecto) | `SidecarBackend` |
+| | `CliBackend` | `SidecarBackend` (por defecto) |
 |---|---|---|
 | Qué ejecuta | un proceso `typst compile` por documento | procesos `typst-sidecar` que quedan vivos |
 | Factura (2 págs., datos distintos por PDF), p50 | 34 ms | 10 ms |
 | Throughput factura, 4 vCPU | ~100 PDF/s | ~270 PDF/s |
 | Documento con bloque de código resaltado | 154 ms | 4 ms |
 | Memoria | ~30 MB por compilación en curso | ~60 MB por proceso, estable |
-| Requiere | binario oficial `typst` | binario `typst-sidecar` (compilar o descargar del release) |
+| Requiere | binario oficial `typst` en el PATH | nada: viene en el paquete npm de la plataforma |
 
 Los dos producen los mismos píxeles (los tests visuales corren con ambos). El
 sidecar se reinicia solo si se cae, si excede el timeout o cada
 `maxCompilationsPerProcess` documentos. No soporta paquetes de Typst Universe
 (`@preview/…`), que el transpilador no usa.
 
-```sh
-cargo build --release --manifest-path crates/typst-sidecar/Cargo.toml
-export TYPST_SIDECAR_PATH=$PWD/crates/typst-sidecar/target/release/typst-sidecar
-```
+En el repo, `pnpm sidecar:build` compila el binario para la máquina local y lo
+deja en `npm/typst-sidecar-<plataforma>-<arquitectura>/bin`, donde lo encuentra
+igual que en una instalación de npm (en Linux necesita `musl-tools` y
+`CC_x86_64_unknown_linux_musl=musl-gcc`). `TYPST_SIDECAR_PATH` permite usar otro binario.
 
 ```ts
 const renderer = new PdfRenderer({ sidecar: { processes: 4, timeoutMs: 10_000 } });
@@ -107,14 +107,14 @@ Lo mismo se puede hacer en un solo HTML con CSS estándar de páginas con nombre
 ### Otros paquetes
 
 ```ts
-import { htmlToTypst } from "html-to-typst";
+import { htmlToTypst } from "@gjeria/html-to-typst";
 
 const { source, warnings, assets } = htmlToTypst(html);
 // assets: rutas de <img> para resolver y pasar como `files` al compilador
 ```
 
 ```ts
-import { CliBackend } from "typst-compiler";
+import { CliBackend } from "@gjeria/typst-compiler";
 
 const typst = new CliBackend({ maxConcurrency: 4, timeoutMs: 10_000 });
 await typst.verify(); // falla pronto si no hay binario
@@ -129,28 +129,24 @@ const { pdf, warnings } = await typst.compile({
 
 ## En producción
 
-Se publican los tres paquetes de npm (la fachada depende de los otros dos), pero
-una aplicación solo instala `typst-html-pdf`. El binario `typst-sidecar` se
-distribuye aparte (release de GitHub o imagen Docker), como el binario de Typst.
+Una aplicación solo instala `@gjeria/typst-html-pdf`. El motor viene incluido:
+`@gjeria/typst-compiler` declara como dependencias opcionales los paquetes
+`@gjeria/typst-sidecar-<plataforma>-<arquitectura>` (Linux x64/arm64 estático,
+macOS x64/arm64, Windows x64) y npm instala solo el que corresponde, como hace
+esbuild. Sin Chromium, sin instalar Typst, sin paquetes del sistema.
 
 ```dockerfile
-FROM rust:1-bookworm AS sidecar
-COPY crates/typst-sidecar /src
-RUN cargo build --release --locked --manifest-path /src/Cargo.toml
-
-FROM node:22-bookworm-slim
-COPY --from=sidecar /src/target/release/typst-sidecar /usr/local/bin/
-COPY fonts /app/fonts
-ENV TYPST_SIDECAR_PATH=/usr/local/bin/typst-sidecar
+FROM node:22-slim
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
-RUN corepack enable && pnpm install --prod --frozen-lockfile
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev          # trae el binario typst-sidecar de linux-x64
+COPY fonts ./fonts
 COPY dist ./dist
 CMD ["node", "dist/server.js"]
 ```
 
 ```ts
-import { PdfRenderer, TypstCompileError } from "typst-html-pdf";
+import { PdfRenderer, TypstCompileError } from "@gjeria/typst-html-pdf";
 
 // Uno por proceso de Node, creado al arrancar.
 const renderer = new PdfRenderer({
@@ -177,17 +173,15 @@ process.on("SIGTERM", () => renderer.dispose());
 ## Publicar en npm
 
 Las versiones y los CHANGELOG salen de `.changeset/` (`pnpm changeset` para
-registrar un cambio, `pnpm changeset version` para aplicar los pendientes).
+registrar un cambio, `pnpm changeset version` para aplicar los pendientes; todos
+los paquetes `@gjeria/*` comparten versión).
 
-```sh
-npm login                 # cuenta de npm con 2FA
-pnpm install && pnpm test
-pnpm release              # build + changeset publish (publica solo versiones nuevas)
-git push --follow-tags    # tags html-to-typst@x.y.z, typst-compiler@x.y.z, typst-html-pdf@x.y.z
-```
-
-El binario `typst-sidecar` se publica aparte: `git tag sidecar-v0.1.0 && git push --tags`
-dispara el workflow que adjunta los binarios al release de GitHub.
+La publicación la hace el workflow **Release** (Actions → Release → Run
+workflow): compila `typst-sidecar` para las 5 plataformas, corre los tests y
+publica con provenance todo lo que no esté en npm. Requiere el secreto
+`NPM_TOKEN` (token *Automation* de npm con acceso al scope `@gjeria`). Publicar
+desde una máquina local no sirve: los paquetes de plataforma se negarían a
+publicarse sin su binario.
 
 ## Soporte de HTML/CSS
 

@@ -31,16 +31,20 @@ jobs:
             ~/.cargo/git
             crates/typst-sidecar/target
           key: sidecar-${{ runner.os }}-${{ hashFiles('crates/typst-sidecar/Cargo.lock') }}
-      - name: Build typst-sidecar
-        run: cargo build --release --locked --manifest-path crates/typst-sidecar/Cargo.toml
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: rustup target add x86_64-unknown-linux-musl
       - run: pnpm install --frozen-lockfile
+      # The same static binary the npm platform package ships.
+      - name: Build typst-sidecar
+        run: pnpm sidecar:build
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
       - run: pnpm typecheck
       - run: pnpm test
       - name: Visual regression on the sidecar backend
         run: pnpm vitest run packages/pdf/test/visual.test.ts
         env:
           VISUAL_BACKEND: sidecar
-          TYPST_SIDECAR_PATH: ${{ github.workspace }}/crates/typst-sidecar/target/release/typst-sidecar
       - run: pnpm build
       - name: Upload visual diffs
         if: failure()

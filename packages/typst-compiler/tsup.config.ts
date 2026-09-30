@@ -7,4 +7,6 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: "node20",
+  // `import.meta.url` in the CJS build (sidecar binary lookup).
+  shims: true,
 });

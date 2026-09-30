@@ -5,20 +5,20 @@ HTML/CSS to PDF in Node.js **without Chromium**. HTML and CSS are transpiled to
 invoice, ~60 MB per worker, no headless browser.
 
 ```sh
-npm install typst-html-pdf
+npm install @gjeria/typst-html-pdf
 ```
 
-It needs one of these binaries on the machine:
+That's it: the Typst engine comes with the package as a prebuilt binary for
+Linux (x64/arm64, any distro including Alpine), macOS (x64/arm64) and Windows
+(x64). No Chromium, no Typst install, no system packages.
 
-- the official [`typst`](https://github.com/typst/typst/releases) CLI (0.15.x), used by default, or
-- [`typst-sidecar`](https://github.com/GonzaloJeria/typst-node/tree/main/crates/typst-sidecar)
-  (faster: Typst stays loaded between documents). Build it with
-  `cargo build --release` or download it from the GitHub releases.
+On other platforms, or if optional dependencies were skipped, it falls back to
+the official [`typst`](https://github.com/typst/typst/releases) CLI on the PATH.
 
 ## Usage
 
 ```ts
-import { htmlToPdf } from "typst-html-pdf";
+import { htmlToPdf } from "@gjeria/typst-html-pdf";
 
 const { pdf, warnings } = await htmlToPdf(`
   <style>@page { size: A4; margin: 20mm } h1 { color: #4f46e5 }</style>
@@ -29,10 +29,10 @@ const { pdf, warnings } = await htmlToPdf(`
 For a server, create one renderer at startup:
 
 ```ts
-import { PdfRenderer } from "typst-html-pdf";
+import { PdfRenderer } from "@gjeria/typst-html-pdf";
 
 const renderer = new PdfRenderer({
-  sidecar: { processes: 4, timeoutMs: 15_000, fonts: [{ dir: "/app/fonts" }] },
+  sidecar: { processes: 2, timeoutMs: 15_000, fonts: [{ dir: "/app/fonts" }] },
   defaults: {
     genericFamilies: { "sans-serif": ["Inter"] },
     assets: { baseDir: "/app/templates", allowRemote: true, allowedHosts: ["cdn.example.com"] },

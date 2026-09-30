@@ -5,10 +5,12 @@ dependencies; two interchangeable backends:
 
 - `CliBackend`: runs the official `typst` binary once per document.
 - `SidecarBackend`: keeps [`typst-sidecar`](https://github.com/GonzaloJeria/typst-node/tree/main/crates/typst-sidecar)
-  processes alive between documents (several times faster).
+  processes alive between documents (several times faster). The binary is
+  installed automatically through a platform-specific optional dependency
+  (`@gjeria/typst-sidecar-<platform>-<arch>`); `resolveSidecarBinary()` finds it.
 
 ```ts
-import { SidecarBackend } from "typst-compiler";
+import { SidecarBackend } from "@gjeria/typst-compiler";
 
 const typst = new SidecarBackend({ processes: 4, timeoutMs: 10_000 });
 const { pdf, warnings } = await typst.compile({
