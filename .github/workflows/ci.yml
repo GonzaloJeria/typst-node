@@ -1,9 +1,15 @@
 name: CI
 
+# Pull requests only: a merge to main was already tested as the PR's merge
+# commit. Docs-only changes skip CI, and a new push cancels the older run.
 on:
-  push:
-    branches: [main]
   pull_request:
+    paths-ignore: ["**.md", "LICENSE", ".changeset/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   # Must match packages/pdf/test/visual/__goldens__/TYPST_VERSION.
@@ -24,21 +30,20 @@ jobs:
           curl -sSL "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz" | tar -xJ
           sudo install typst-x86_64-unknown-linux-musl/typst /usr/local/bin/typst
           typst --version
-      - uses: actions/cache@v4
+      # Restores compiled dependencies even when Cargo.lock changes.
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            crates/typst-sidecar/target
-          key: sidecar-${{ runner.os }}-${{ hashFiles('crates/typst-sidecar/Cargo.lock') }}
-      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+          workspaces: crates/typst-sidecar
+      - run: pip install cargo-zigbuild==0.23.4 ziglang==0.14.1
       - run: rustup target add x86_64-unknown-linux-musl
       - run: pnpm install --frozen-lockfile
-      # The same static binary the npm platform package ships.
+      # The static binary the npm platform package ships, built without LTO
+      # (the `ci` profile) because tests don't need the last few percent.
       - name: Build typst-sidecar
         run: pnpm sidecar:build
         env:
-          CC_x86_64_unknown_linux_musl: musl-gcc
+          SIDECAR_PROFILE: ci
+          SIDECAR_CARGO: zigbuild
       - run: pnpm typecheck
       - run: pnpm test
       - name: Visual regression on the sidecar backend
