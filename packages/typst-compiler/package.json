@@ -1,11 +1,28 @@
 {
   "name": "typst-compiler",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Compile Typst to PDF, PNG or SVG from Node.js with the official Typst binary or long-lived typst-sidecar processes.",
+  "keywords": [
+    "typst",
+    "pdf",
+    "compiler",
+    "typesetting"
+  ],
+  "author": "Gonzalo Jeria (https://github.com/GonzaloJeria)",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GonzaloJeria/typst-node.git",
+    "directory": "packages/typst-compiler"
+  },
+  "homepage": "https://github.com/GonzaloJeria/typst-node/tree/main/packages/typst-compiler#readme",
+  "bugs": "https://github.com/GonzaloJeria/typst-node/issues",
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -24,10 +41,25 @@
     }
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19"
   },
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.cjs"
+        }
+      }
+    }
   }
 }
