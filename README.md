@@ -4,8 +4,9 @@ Generación de PDF en Node.js sin navegador: HTML/CSS → Typst → PDF.
 
 | Paquete | Estado |
 |---|---|
-| [`typst-compiler`](packages/typst-compiler) | `TypstBackend` + `CliBackend` (binario oficial de Typst, cero dependencias de runtime) |
+| [`typst-compiler`](packages/typst-compiler) | `TypstBackend` + `CliBackend` (binario oficial de Typst por documento) + `SidecarBackend` (procesos Typst persistentes); cero dependencias de runtime |
 | [`typst-html-pdf`](packages/pdf) | Fachada `htmlToPdf()` / `PdfRenderer`: transpila, resuelve imágenes (data URI, archivos locales acotados a `baseDir`, HTTP con protección SSRF) y compila |
+| [`typst-sidecar`](crates/typst-sidecar) | Binario Rust propio sobre los crates oficiales de Typst: compila por JSON sobre stdin/stdout sin reiniciar entre documentos |
 | [`html-to-typst`](packages/html-to-typst) | HTML/CSS → IR → Typst: parse5, cascada CSS propia (selectores, especificidad, herencia, shorthands, `@page`, `@media print`), tablas con rowspan/colspan, flex/grid básicos, saltos de página |
 
 ## Requisitos
@@ -40,6 +41,32 @@ Por defecto las imágenes remotas están desactivadas. Al activarlas, se bloquea
 las IP privadas, de loopback y link-local, validando la IP exacta al conectar
 (protege también contra DNS rebinding). Las redirecciones se vuelven a validar
 en cada salto, y hay límites de tamaño y timeout.
+
+### Backends: CLI o sidecar
+
+| | `CliBackend` (por defecto) | `SidecarBackend` |
+|---|---|---|
+| Qué ejecuta | un proceso `typst compile` por documento | procesos `typst-sidecar` que quedan vivos |
+| Factura (2 págs., datos distintos por PDF), p50 | 34 ms | 10 ms |
+| Throughput factura, 4 vCPU | ~100 PDF/s | ~270 PDF/s |
+| Documento con bloque de código resaltado | 154 ms | 4 ms |
+| Memoria | ~30 MB por compilación en curso | ~60 MB por proceso, estable |
+| Requiere | binario oficial `typst` | binario `typst-sidecar` (compilar o descargar del release) |
+
+Los dos producen los mismos píxeles (los tests visuales corren con ambos). El
+sidecar se reinicia solo si se cae, si excede el timeout o cada
+`maxCompilationsPerProcess` documentos. No soporta paquetes de Typst Universe
+(`@preview/…`), que el transpilador no usa.
+
+```sh
+cargo build --release --manifest-path crates/typst-sidecar/Cargo.toml
+export TYPST_SIDECAR_PATH=$PWD/crates/typst-sidecar/target/release/typst-sidecar
+```
+
+```ts
+const renderer = new PdfRenderer({ sidecar: { processes: 4, timeoutMs: 10_000 } });
+await renderer.warmup(); // arranca los procesos antes del primer request
+```
 
 ### Plantillas y secciones
 
@@ -98,6 +125,53 @@ const { pdf, warnings } = await typst.compile({
   fonts: [interBytes],
   inputs: { name: "Ada" },
 });
+```
+
+## En producción
+
+Se publican los tres paquetes de npm (la fachada depende de los otros dos), pero
+una aplicación solo instala `typst-html-pdf`. El binario `typst-sidecar` se
+distribuye aparte (release de GitHub o imagen Docker), como el binario de Typst.
+
+```dockerfile
+FROM rust:1-bookworm AS sidecar
+COPY crates/typst-sidecar /src
+RUN cargo build --release --locked --manifest-path /src/Cargo.toml
+
+FROM node:22-bookworm-slim
+COPY --from=sidecar /src/target/release/typst-sidecar /usr/local/bin/
+COPY fonts /app/fonts
+ENV TYPST_SIDECAR_PATH=/usr/local/bin/typst-sidecar
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --prod --frozen-lockfile
+COPY dist ./dist
+CMD ["node", "dist/server.js"]
+```
+
+```ts
+import { PdfRenderer, TypstCompileError } from "typst-html-pdf";
+
+// Uno por proceso de Node, creado al arrancar.
+const renderer = new PdfRenderer({
+  sidecar: { processes: 4, timeoutMs: 15_000, fonts: [{ dir: "/app/fonts" }] },
+  defaults: {
+    strict: false,
+    genericFamilies: { "sans-serif": ["Inter"], serif: ["Source Serif 4"] },
+    assets: { baseDir: "/app/templates", allowRemote: true, allowedHosts: ["cdn.miempresa.com"] },
+  },
+});
+await renderer.warmup();
+
+const { pdf, warnings } = await renderer.render({
+  layout: { css: baseCss, page: { size: "A4", margin: "22mm 18mm", header: headerHtml, footer: "{{page}} / {{pages}}" } },
+  sections: [
+    { html: renderTemplate("factura", data), css: facturaCss },
+    { html: terminosHtml, page: { header: false } },
+  ],
+}, { signal: AbortSignal.timeout(20_000) });
+
+process.on("SIGTERM", () => renderer.dispose());
 ```
 
 ## Soporte de HTML/CSS

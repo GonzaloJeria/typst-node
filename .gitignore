@@ -4,3 +4,4 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 packages/pdf/test/visual/__diff__/
+crates/*/target/
