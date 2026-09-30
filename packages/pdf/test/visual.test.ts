@@ -21,8 +21,11 @@ const read = (f: string) => readFileSync(path.join(FIXTURES, f), "utf8");
 const PPI = 50;
 
 describe.skipIf(!version)("visual regression", () => {
+  // VISUAL_BACKEND=sidecar checks that the sidecar matches the same goldens.
   const renderer = new PdfRenderer({
-    cli: { creationTimestamp: 0 },
+    ...(process.env.VISUAL_BACKEND === "sidecar"
+      ? { sidecar: { creationTimestamp: 0, processes: 2 } }
+      : { cli: { creationTimestamp: 0 } }),
     defaults: { assets: { baseDir: FIXTURES } },
   });
   afterAll(() => renderer.dispose());

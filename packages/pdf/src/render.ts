@@ -1,7 +1,9 @@
 import { composeToTypst, htmlToTypst, mapImages, emitDocument, type ComposeInput, type TranspileOptions } from "html-to-typst";
 import {
   CliBackend,
+  SidecarBackend,
   type CliBackendOptions,
+  type SidecarBackendOptions,
   type Diagnostic,
   type FontSource,
   type PageFormat,
@@ -43,8 +45,13 @@ export type RenderInput = string | ComposeInput;
 export interface PdfRendererOptions {
   /** Backend to use; defaults to a `CliBackend` owned by the renderer. */
   backend?: TypstBackend;
-  /** Options for the default `CliBackend`. Ignored when `backend` is given. */
+  /** Options for the default `CliBackend`. Ignored when `backend` or `sidecar` is given. */
   cli?: CliBackendOptions;
+  /**
+   * Use long-lived `typst-sidecar` processes instead of one `typst` process
+   * per document (several times faster). `true` uses the defaults.
+   */
+  sidecar?: SidecarBackendOptions | true;
   /** Defaults merged into every render call. */
   defaults?: RenderOptions;
 }
@@ -56,7 +63,9 @@ export class PdfRenderer {
   readonly #defaults: RenderOptions;
 
   constructor(options: PdfRendererOptions = {}) {
-    this.backend = options.backend ?? new CliBackend(options.cli);
+    this.backend =
+      options.backend ??
+      (options.sidecar ? new SidecarBackend(options.sidecar === true ? {} : options.sidecar) : new CliBackend(options.cli));
     this.#owned = options.backend === undefined;
     this.#defaults = options.defaults ?? {};
   }
@@ -83,6 +92,12 @@ export class PdfRenderer {
       ...compileExtras(opts),
     });
     return { pages: result.pages, warnings: prepared.warnings, diagnostics: result.warnings, source: prepared.source };
+  }
+
+  /** Starts the backend's processes ahead of the first render, when it supports it. */
+  async warmup(): Promise<void> {
+    const backend = this.backend as TypstBackend & { warmup?(): Promise<void> };
+    await backend.warmup?.();
   }
 
   async dispose(): Promise<void> {

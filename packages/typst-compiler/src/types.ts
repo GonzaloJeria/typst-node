@@ -1,7 +1,7 @@
 /**
- * Backend-agnostic contract. `CliBackend` implements it today; a future
- * persistent Rust sidecar or N-API backend must implement the same shape so
- * callers (and `html-to-typst`) never change.
+ * Backend-agnostic contract, implemented by `CliBackend` (one official
+ * `typst` process per document) and `SidecarBackend` (long-lived
+ * `typst-sidecar` processes), so callers never depend on how Typst runs.
  */
 
 /** A font given either as raw bytes (TTF/OTF/TTC) or as a directory to scan. */

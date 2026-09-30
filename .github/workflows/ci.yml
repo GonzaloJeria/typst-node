@@ -24,9 +24,23 @@ jobs:
           curl -sSL "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz" | tar -xJ
           sudo install typst-x86_64-unknown-linux-musl/typst /usr/local/bin/typst
           typst --version
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/typst-sidecar/target
+          key: sidecar-${{ runner.os }}-${{ hashFiles('crates/typst-sidecar/Cargo.lock') }}
+      - name: Build typst-sidecar
+        run: cargo build --release --locked --manifest-path crates/typst-sidecar/Cargo.toml
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Visual regression on the sidecar backend
+        run: pnpm vitest run packages/pdf/test/visual.test.ts
+        env:
+          VISUAL_BACKEND: sidecar
+          TYPST_SIDECAR_PATH: ${{ github.workspace }}/crates/typst-sidecar/target/release/typst-sidecar
       - run: pnpm build
       - name: Upload visual diffs
         if: failure()
