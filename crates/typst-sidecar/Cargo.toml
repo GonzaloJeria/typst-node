@@ -29,3 +29,9 @@ strip = true
 # builds use jemalloc, which measured faster and ~30% smaller than mimalloc.
 [target.'cfg(target_env = "musl")'.dependencies]
 tikv-jemallocator = "0.6"
+
+# Faster to compile, for CI tests (`--profile ci`); releases use `release`.
+[profile.ci]
+inherits = "release"
+lto = false
+codegen-units = 16

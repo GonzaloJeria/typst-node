@@ -1,7 +1,7 @@
 {
   "name": "@gjeria/typst-sidecar-win32-x64",
   "version": "0.1.0",
-  "description": "typst-sidecar binary for win32-x64 (x86_64-pc-windows-msvc), used by @gjeria/typst-compiler.",
+  "description": "typst-sidecar binary for win32-x64 (x86_64-pc-windows-gnu), used by @gjeria/typst-compiler.",
   "author": "Gonzalo Jeria (https://github.com/GonzaloJeria)",
   "license": "MIT",
   "repository": {
@@ -31,7 +31,7 @@
     "access": "public"
   },
   "typstSidecar": {
-    "target": "x86_64-pc-windows-msvc",
+    "target": "x86_64-pc-windows-gnu",
     "binary": "bin/typst-sidecar.exe"
   }
 }
