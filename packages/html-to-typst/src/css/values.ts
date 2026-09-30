@@ -331,3 +331,10 @@ export function parseShadows(value: string, ctx: LengthContext): Shadow[] | unde
   }
   return layers;
 }
+
+/** `url("…")` → the URL, unescaped. */
+export function parseUrl(value: string): string | undefined {
+  const m = /^url\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^\s)"']+))\s*\)$/i.exec(value.trim());
+  const url = m && (m[1] ?? m[2] ?? m[3]);
+  return url ? url.replace(/\\(.)/g, "$1") : undefined;
+}

@@ -2,9 +2,11 @@ import { parse } from "parse5";
 import { Cascade } from "./css/cascade.js";
 import { parseStylesheet, type Declaration } from "./css/parse.js";
 import { expandBox, parseColor, parseFontSize, parseGradient, parseLength, splitValue, type LengthContext } from "./css/values.js";
-import { Converter, lineGap, type ConvertOptions } from "./convert.js";
+import { backgroundImage, Converter, lineGap, type ConvertOptions } from "./convert.js";
+import { expandShorthand } from "./css/cascade.js";
 import { attr, findAll, findFirst, isText } from "./dom.js";
 import { emitDocument } from "./emit.js";
+import { mapImages } from "./walk.js";
 import type { Block, Document, Inline, Length, MarginBand, MarginBox, PageSetup, Paint, TextStyle } from "./ir.js";
 
 export interface TranspileOptions extends ConvertOptions {
@@ -103,7 +105,10 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   const warnings = [...converter.warnings, ...cascade.warnings];
   if (options.strict && warnings.length) throw new TranspileError(warnings);
 
-  const assets = [...new Set(findAll(doc, "img").map((img) => attr(img, "src")).filter((s): s is string => !!s))];
+  // Every image the document references: <img> and CSS background images.
+  const found = new Set<string>();
+  mapImages(document, (src) => (found.add(src), src));
+  const assets = [...found];
   return { source: emitDocument(document), document, warnings, assets };
 }
 
@@ -127,7 +132,7 @@ function resolveRuns(
       const page = b.name ? setupOf(b.name) : undefined;
       return [{ ...b, ...(page ? { page } : {}), children }];
     }
-    if (b.kind === "box" || b.kind === "styled-block" || b.kind === "place" || b.kind === "transform" || b.kind === "pad") {
+    if (b.kind === "box" || b.kind === "styled-block" || b.kind === "place" || b.kind === "transform" || b.kind === "pad" || b.kind === "columns") {
       b.children = resolveRuns(b.children, false, setupOf, warnings);
     }
     if (b.kind === "list") b.items = b.items.map((i) => resolveRuns(i, false, setupOf, warnings));
@@ -154,6 +159,7 @@ const PAPER: Record<string, string> = {
 
 function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<string>, first = false): PageSetup | undefined {
   const page: PageSetup = {};
+  const background = new Map<string, string>();
   for (const d of decls) {
     if (first && !/^background/.test(d.property)) {
       warnings.add(`Unsupported @page :first property ignored: ${d.property} (only backgrounds and margin boxes)`);
@@ -178,16 +184,23 @@ function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<strin
       if (ls && ls.every((l) => l && l.unit !== "%")) {
         page.margin = { top: ls[0]!, right: ls[1]!, bottom: ls[2]!, left: ls[3]! };
       }
-    } else if (/^background(-color|-image)?$/.test(d.property)) {
-      const fill = paintOf(new Map([[d.property === "background-color" ? "background-color" : "background-image", d.value]]))
-        ?? paintOf(new Map([["background-color", splitValue(d.value).find((t) => parseColor(t)) ?? ""]]));
-      if (fill) page.fill = fill;
-      else warnings.add(`Unsupported @page value ignored: ${d.property}: ${d.value}`);
+    } else if (/^background(-color|-image|-size|-position|-repeat)?$/.test(d.property)) {
+      for (const [p, v] of expandShorthand(d.property, d.value)) background.set(p, v);
     } else if (/^margin-(top|right|bottom|left)$/.test(d.property)) {
       const l = parseLength(d.value, ctx);
       if (l && l.unit !== "%") page.margin = { ...page.margin, [d.property.slice(7)]: l };
     } else {
       warnings.add(`Unsupported @page property ignored: ${d.property}`);
+    }
+  }
+  if (background.size) {
+    const fill = paintOf(background);
+    if (fill) page.fill = fill;
+    const image = backgroundImage(background, ctx);
+    if (image) page.image = image;
+    const repeat = background.get("background-repeat");
+    if (background.has("background-other") || (repeat && repeat !== "no-repeat") || (!fill && !image)) {
+      warnings.add(`Unsupported @page background ignored: ${[...background.values()].join(" ")}`);
     }
   }
   return Object.keys(page).length ? page : undefined;

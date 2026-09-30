@@ -1,4 +1,4 @@
-import type { Block, BoxStyle, PageRun, PageSetup, Sides, Stroke, Document, Inline, MarginBand, MarginBox, Shadow, Size, TableCell, TableRow, TextStyle, TransformOp } from "./ir.js";
+import type { BackgroundImage, Block, BoxStyle, FirstPage, Length, PageRun, PageSetup, Sides, Stroke, Document, Inline, MarginBand, MarginBox, Shadow, Size, TableCell, TableRow, TextStyle, TransformOp } from "./ir.js";
 import { align, call, color, length, num, paint, sides, size, str, stroke } from "./literals.js";
 
 /**
@@ -31,7 +31,6 @@ function pageArgs(p: PageSetup): Record<string, string | undefined> {
     const alt = override ? band(override) : "none";
     return `context if here().page() == 1 { ${alt} } else { ${base ?? "none"} }`;
   };
-  const firstFill = first && "fill" in first;
   return {
     paper: p.paper === undefined ? undefined : str(p.paper),
     flipped: p.flipped ? "true" : undefined,
@@ -40,13 +39,27 @@ function pageArgs(p: PageSetup): Record<string, string | undefined> {
     margin: p.margin && sides(p.margin, length),
     fill: p.fill && paint(p.fill),
     // `fill` cannot vary per page, so a different first-page fill is painted as background.
-    background: firstFill
-      ? `context if here().page() == 1 { ${call("rect", { width: "100%", height: "100%", fill: first.fill ? paint(first.fill) : "white" })} }`
-      : undefined,
+    background: pageBackground(p, first),
     header: first && "header" in first ? decorate(p.header, first.header, true) : decorate(p.header, undefined, false),
     footer: first && "footer" in first ? decorate(p.footer, first.footer, true) : decorate(p.footer, undefined, false),
     foreground: p.foreground && blocks(p.foreground),
   };
+}
+
+/** Page background image and a different first-page fill (`fill` cannot vary per page). */
+function pageBackground(p: PageSetup, first: FirstPage | undefined): string | undefined {
+  const image = p.image && backgroundPicture(p.image, "100%", "100%");
+  if (!first || !("fill" in first)) return image;
+  const cover = call("rect", { width: "100%", height: "100%", fill: first.fill ? paint(first.fill) : "white" });
+  return `context if here().page() == 1 { ${cover} } else { ${image ?? "none"} }`;
+}
+
+function backgroundPicture(img: BackgroundImage, width: string, height: string): string {
+  const fit = img.fit;
+  const picture = typeof fit === "string"
+    ? call("image", { width: "100%", height: "100%", fit: str(fit) }, str(img.src))
+    : call("image", { width: fit.width && length(fit.width), height: fit.height && length(fit.height) }, str(img.src));
+  return call("block", { width, height }, `align(${img.align.x} + ${img.align.y}, ${picture})`);
 }
 
 function pageRun(run: PageRun): string {
@@ -182,25 +195,8 @@ export function emitBlock(node: Block): string {
           )
         : call("list", { marker: node.marker === undefined ? undefined : node.marker === "" ? "[]" : str(node.marker) }, ...items);
     }
-    case "box": {
-      const s = node.style;
-      let b = call(
-        "block",
-        {
-          width: s.width && size(s.width),
-          inset: s.inset && sides(s.inset, length),
-          fill: s.fill && paint(s.fill),
-          stroke: s.stroke && sides(s.stroke, stroke),
-          radius: s.radius && length(s.radius),
-          above: s.above && length(s.above),
-          below: s.below && length(s.below),
-          breakable: s.breakable === undefined ? undefined : String(s.breakable),
-        },
-        blocks(node.children),
-      );
-      if (s.shadows?.length) b = shadowed(b, s);
-      return s.align ? `align(${align(s.align)}, ${b})` : b;
-    }
+    case "box":
+      return boxBlock(node.style, node.children);
     case "place": {
       const dx = node.x === "left" ? length(node.dx) : `-${length(node.dx)}`;
       const dy = node.y === "top" ? length(node.dy) : `-${length(node.dy)}`;
@@ -247,6 +243,8 @@ export function emitBlock(node: Block): string {
       return call("raw", { block: "true", lang: node.lang === undefined ? undefined : str(node.lang) }, str(node.value));
     case "rule":
       return "line(length: 100%)";
+    case "columns":
+      return balancedColumns(node.count, node.gutter ? length(node.gutter) : "1em", blocks(node.children));
     case "page-run":
       return pageRun(node);
     case "pagebreak":
@@ -292,6 +290,75 @@ const BLUR_STEPS = 4;
  * Paints `box-shadow` layers behind a block. Typst has no shadows, so the
  * block is measured and translucent rounded rectangles are placed under it.
  */
+function boxBlock(s: BoxStyle, children: Block[]): string {
+  const vpad = [s.inset?.top, s.inset?.bottom].filter((l): l is Length => !!l).map(length);
+  // CSS heights exclude padding unless border-box; Typst's include it.
+  const outer = (l: Length) => (s.borderBox || !vpad.length ? length(l) : [length(l), ...vpad].join(" + "));
+  const inner = (l: Length) => (!s.borderBox || !vpad.length ? length(l) : [length(l), ...vpad].join(" - "));
+  let body = blocks(children);
+  // A zero-width strut column keeps the row at least `min-height` tall.
+  if (s.minHeight) body = call("grid", { columns: "(0pt, 1fr)" }, call("block", { height: inner(s.minHeight) }), body);
+  const spacing = {
+    above: s.above && length(s.above),
+    below: s.below && length(s.below),
+    breakable: s.breakable === undefined ? undefined : String(s.breakable),
+  };
+  const args = {
+    width: s.width && size(s.width),
+    height: s.height && outer(s.height),
+    inset: s.inset && sides(s.inset, length),
+    fill: s.fill && paint(s.fill),
+    stroke: s.stroke && sides(s.stroke, stroke),
+    radius: s.radius && length(s.radius),
+  };
+  let b = s.image ? withBackground(s, args, spacing, body) : call("block", { ...args, ...spacing }, body);
+  if (s.shadows?.length) b = shadowed(b, s);
+  return s.align ? `align(${align(s.align)}, ${b})` : b;
+}
+
+/** Paints a background image under the box content, clipped to the box. */
+function withBackground(
+  s: BoxStyle,
+  args: Record<string, string | undefined>,
+  spacing: Record<string, string | undefined>,
+  body: string,
+): string {
+  const layer = call(
+    "block",
+    { width: "m.width", height: "m.height", radius: args.radius, fill: args.fill, clip: "true" },
+    backgroundPicture(s.image!, "100%", "100%"),
+  );
+  return [
+    "layout(size => {",
+    indent(`let body = ${call("block", { ...args, fill: undefined }, body)}`),
+    "  let m = measure(body, width: size.width, height: size.height)",
+    `  ${call("block", { ...spacing, breakable: "false" }, `{
+    place(${layer})
+    body
+  }`)}`,
+    "})",
+  ].join("\n");
+}
+
+/**
+ * CSS balances column heights by default; Typst fills each column in turn.
+ * Measure the content at column width and cap the height at an even share,
+ * with slack for lines that cannot split across columns. Content taller than
+ * the region flows normally across pages instead.
+ */
+function balancedColumns(count: number, gutter: string, body: string): string {
+  return [
+    "layout(size => {",
+    indent(`let body = ${body}`),
+    `  let w = (size.width - ${gutter} * ${count - 1}) / ${count}`,
+    "  let h = measure(block(width: w, body)).height",
+    `  let target = (h / ${count} + ${count - 1} * 1.5em).to-absolute()`,
+    `  let cols = columns(${count}, gutter: ${gutter}, body)`,
+    "  if target < size.height { block(height: target, breakable: false, cols) } else { cols }",
+    "})",
+  ].join("\n");
+}
+
 function shadowed(block: string, style: BoxStyle): string {
   const radius = style.radius ? length(style.radius) : "0pt";
   const layers = (style.shadows ?? []).flatMap((sh: Shadow) => {
@@ -307,7 +374,7 @@ function shadowed(block: string, style: BoxStyle): string {
   return [
     "layout(size => {",
     indent(`let body = ${block}`),
-    "  let m = measure(body, width: size.width)",
+    "  let m = measure(body, width: size.width, height: size.height)",
     `  block(breakable: false, {\n${layers.map((l) => indent(indent(l))).join("\n")}\n    body\n  })`,
     "})",
   ].join("\n");

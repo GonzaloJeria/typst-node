@@ -129,13 +129,23 @@ y `@bottom-left|center|right`, con `content` de texto, `counter(page)`,
 propio tamaño, márgenes, fondo y cajas de margen; `@page :first` con fondo y
 cajas de margen distintas en la primera página.
 
+**Cajas:** `height` y `min-height` (longitudes o `%`, respetando
+`box-sizing`); imágenes de fondo con `background-image: url()` o el shorthand
+`background` (`cover`, `contain`, `100% 100%` o un tamaño, posición con
+palabras clave, `no-repeat`), recortadas al `border-radius`. `@page { background: url(…) }` pinta una imagen
+detrás de cada página (marcas de agua, membretes).
+
+**Columnas:** `column-count`, `columns: N` y `column-gap`, con columnas
+balanceadas como en CSS cuando el bloque cabe en la página (si no, el texto
+fluye columna a columna entre páginas). Ideal para términos y condiciones.
+
 **Espaciado:** márgenes horizontales (`pad` en bloques, espacio en elementos
 inline, combinables con `auto`) y `line-height` (número, %, longitud;
 `normal` ≈ 1.2).
 
-**Todavía no:** `float`, `height`, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
+**Todavía no:** `float`, fondos repetidos (`repeat`) o con varias capas, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
 márgenes o tamaño distintos en `@page :first`, `@page :left/:right`,
-`@page nombre:first`, imágenes de fondo.
+`@page nombre:first`, `column-width`, `column-rule`, `column-span`.
 
 Nada se descarta en silencio: cada propiedad o valor que no se sabe renderizar
 genera un warning, y con `strict: true` `htmlToTypst` lanza un `TranspileError`.

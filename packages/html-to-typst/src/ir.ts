@@ -68,6 +68,14 @@ export type TransformOp =
 
 export interface BoxStyle {
   width?: Size;
+  /** CSS `height`; padding is added unless `borderBox`. */
+  height?: Length;
+  /** CSS `min-height`; padding is added unless `borderBox`. */
+  minHeight?: Length;
+  /** `box-sizing: border-box`: heights already include the padding. */
+  borderBox?: boolean;
+  /** `background-image: url()`, painted over the fill and under the content. */
+  image?: BackgroundImage;
   inset?: Sides<Length>;
   fill?: Paint;
   stroke?: Sides<Stroke>;
@@ -80,6 +88,13 @@ export interface BoxStyle {
   align?: HAlign;
   /** Outer shadows, painted behind the box (makes it unbreakable). */
   shadows?: Shadow[];
+}
+
+export interface BackgroundImage {
+  src: string;
+  /** `cover`/`contain` scale to the box; `stretch` fills it; a size is used as is. */
+  fit: "cover" | "contain" | "stretch" | { width?: Length; height?: Length };
+  align: { x: HAlign; y: VAlign };
 }
 
 export interface InlineBoxStyle {
@@ -142,6 +157,8 @@ export type Block =
   /** Horizontal margins (outside the box, like CSS). */
   | { kind: "pad"; left?: Length; right?: Length; children: Block[] }
   | PageRun
+  /** CSS multi-column layout (`column-count`). */
+  | { kind: "columns"; count: number; gutter?: Length; children: Block[] }
   | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[] }
   | {
       kind: "list";
@@ -200,6 +217,8 @@ export interface PageSetup {
   height?: Length;
   margin?: Sides<Length>;
   fill?: Paint;
+  /** `@page { background-image: url() }`, painted behind the content on every page. */
+  image?: BackgroundImage;
   /** `null` removes an inherited header (e.g. a named page with `content: none`). */
   header?: MarginBand | null;
   footer?: MarginBand | null;

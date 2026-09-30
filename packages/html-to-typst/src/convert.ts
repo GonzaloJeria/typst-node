@@ -1,9 +1,9 @@
 import { Cascade, type ComputedStyle, type PseudoElement } from "./css/cascade.js";
 import { checkDeclaration } from "./css/support.js";
-import { parseColor, parseGradient, parseLength, parseShadows, parseTransform, splitValue, withAlpha, type LengthContext } from "./css/values.js";
+import { parseColor, parseGradient, parseLength, parseShadows, parseTransform, parseUrl, splitValue, withAlpha, type LengthContext } from "./css/values.js";
 import { attr, isElement, isText, type Element, type Node } from "./dom.js";
 import type {
-  Block, BoxStyle, Color, HAlign, Inline, InlineBoxStyle, Length, Paint, Sides, Size, Stroke, TableCell, TableRow, TextStyle, TransformOp,
+  BackgroundImage, Block, BoxStyle, Color, HAlign, Inline, InlineBoxStyle, Length, Paint, Sides, Size, Stroke, TableCell, TableRow, TextStyle, TransformOp, VAlign,
 } from "./ir.js";
 
 export interface ConvertOptions {
@@ -150,6 +150,13 @@ export class Converter {
       content = this.#grid(el, style, display);
     } else {
       content = this.blocks(el, style);
+      const count = Number(style.own.get("column-count"));
+      if (count > 1) {
+        const gap = style.props.get("column-gap");
+        const gutter = gap && gap !== "normal" ? parseLength(gap, lengthContext(style)) : undefined;
+        // CSS `normal` gap is 1em.
+        content = [{ kind: "columns", count, gutter: gutter ?? { value: 1, unit: "em" }, children: content }];
+      }
     }
 
     const position = style.own.get("position") ?? "static";
@@ -239,7 +246,15 @@ export class Converter {
     }
     const inset = sides((side) => positive(parseLength(p.get(`padding-${side}`) ?? "", ctx)));
     if (inset) box.inset = inset;
+    for (const [prop, key] of [["height", "height"], ["min-height", "minHeight"]] as const) {
+      const v = p.get(prop);
+      const l = v && v !== "auto" ? positive(parseLength(v, ctx)) : undefined;
+      if (l) box[key] = l;
+    }
+    if ((box.height || box.minHeight) && p.get("box-sizing") === "border-box") box.borderBox = true;
     const opacity = opacityOf(s);
+    const image = backgroundImage(p, ctx);
+    if (image) box.image = image;
     const fill = backgroundOf(p, opacity);
     if (fill) box.fill = fill;
     const stroke = sides((side) => borderStroke(p, side, ctx, opacity));
@@ -261,7 +276,7 @@ export class Converter {
     // CSS blocks stretch to the container; make that visible when the box is.
     // Absolutely positioned boxes shrink to fit instead.
     const outOfFlow = /^(absolute|fixed)$/.test(s.own.get("position") ?? "");
-    if (!box.width && !box.align && !outOfFlow && (box.fill || box.stroke || box.shadows) && el.tagName !== "table") {
+    if (!box.width && !box.align && !outOfFlow && (box.fill || box.stroke || box.shadows || box.image) && el.tagName !== "table") {
       box.width = { value: 100, unit: "%" };
     }
     // Tables and images carry their own width; keep them as the box body.
@@ -887,6 +902,25 @@ function opacityOf(s: ComputedStyle): number {
 }
 
 /** Background paint: a gradient wins over the color layer, as it is painted on top. */
+export function backgroundImage(p: ReadonlyMap<string, string>, ctx: LengthContext): BackgroundImage | undefined {
+  const src = parseUrl(p.get("background-image") ?? "");
+  if (!src) return undefined;
+  const sizeValue = p.get("background-size") ?? "auto";
+  let fit: BackgroundImage["fit"];
+  if (sizeValue === "cover" || sizeValue === "contain") fit = sizeValue;
+  else {
+    const [w, h] = splitValue(sizeValue).map((t) => (t === "auto" ? undefined : parseLength(t, ctx)));
+    if (w?.unit === "%" && w.value === 100 && h?.unit === "%" && h.value === 100) fit = "stretch";
+    // `auto` (natural size) has no Typst equivalent without the image's pixel size: fit the width.
+    else fit = { ...(w ? { width: w } : !h ? { width: { value: 100, unit: "%" } } : {}), ...(h ? { height: h } : {}) };
+  }
+  const pos = splitValue(p.get("background-position") ?? "left top");
+  // A single keyword centers the other axis, as in CSS.
+  const x = pos.find((t) => t === "left" || t === "right") ?? (pos.includes("center") || pos.length === 1 ? "center" : "left");
+  const y = pos.find((t) => t === "top" || t === "bottom") ?? (pos.includes("center") || pos.length === 1 ? "horizon" : "top");
+  return { src, fit, align: { x, y: y as VAlign } };
+}
+
 function backgroundOf(p: ReadonlyMap<string, string>, opacity: number): Paint | undefined {
   const gradient = parseGradient(p.get("background-image") ?? "");
   if (gradient) {

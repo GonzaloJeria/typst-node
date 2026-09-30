@@ -1,4 +1,4 @@
-import { parseColor, parseFontSize, parseGradient, parseLength, parseShadows, parseTransform } from "./values.js";
+import { parseUrl, splitValue, parseColor, parseFontSize, parseGradient, parseLength, parseShadows, parseTransform } from "./values.js";
 
 /**
  * Every CSS property the converter understands, with a validator for the
@@ -26,7 +26,12 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   ...Object.fromEntries(SIDE_PROPS),
   color: isColor,
   "background-color": isColor,
-  "background-image": (v) => v === "none" || parseGradient(v) !== undefined,
+  "background-image": (v) => v === "none" || parseGradient(v) !== undefined || parseUrl(v) !== undefined,
+  "background-size": (v) => /^(?:auto|cover|contain)$/.test(v) || splitValue(v).every((t) => t === "auto" || isLength(t)),
+  "background-position": (v) => /^(?:(?:center|top|bottom|left|right)\s*){1,2}$/.test(v.trim()),
+  "background-repeat": oneOf("no-repeat"),
+  height: (v) => v === "auto" || isLength(v),
+  "min-height": (v) => v === "auto" || v === "0" || isLength(v),
   "background-other": () => false,
   opacity: (v) => /^(?:0|1|0?\.\d+|1\.0*|\d{1,3}%)$/.test(v.trim()),
   "font-family": any,
@@ -68,6 +73,8 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   "grid-template-columns": any,
   gap: any,
   "column-gap": any,
+  "column-count": (v) => v === "auto" || /^[1-9]\d?$/.test(v),
+  "column-fill": oneOf("balance", "auto"),
   "vertical-align": oneOf("baseline"),
   visibility: oneOf("visible"),
   "font-size-adjust": oneOf("none"),
