@@ -2,7 +2,7 @@ import { parse } from "parse5";
 import { Cascade } from "./css/cascade.js";
 import { parseStylesheet, type Declaration } from "./css/parse.js";
 import { expandBox, parseColor, parseFontSize, parseGradient, parseLength, splitValue, type LengthContext } from "./css/values.js";
-import { Converter, type ConvertOptions } from "./convert.js";
+import { Converter, lineGap, type ConvertOptions } from "./convert.js";
 import { attr, findAll, findFirst, isText } from "./dom.js";
 import { emitDocument } from "./emit.js";
 import type { Block, Document, Inline, Length, MarginBand, MarginBox, PageSetup, Paint, TextStyle } from "./ir.js";
@@ -58,7 +58,10 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   const color = parseColor(bodyStyle.props.get("color") ?? "");
   if (color) text.fill = color;
 
+  converter.baseLineHeight = bodyStyle.props.get("line-height");
   const document: Document = { text, children: converter.blocks(body, bodyStyle) };
+  const leading = lineGap(converter.baseLineHeight, bodyStyle);
+  if (leading && converter.baseLineHeight && converter.baseLineHeight !== "normal") document.leading = leading;
   const ctx = { fontSize: bodyStyle.fontSize, rootFontSize: cascade.rootFontSize };
   const page = pageSetup(sheet.page, ctx, converter.warnings) ?? {};
   // Paged media paints the canvas with the root/body background.

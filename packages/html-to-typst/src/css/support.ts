@@ -14,7 +14,6 @@ const isAbsolute = (v: string) => {
   const l = parseLength(v, ctx);
   return l !== undefined && l.unit !== "%";
 };
-const isZero = (v: string) => parseLength(v, ctx)?.value === 0;
 
 const SIDE_PROPS = ["top", "right", "bottom", "left"].flatMap((side) => [
   [`padding-${side}`, isLength],
@@ -40,7 +39,7 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   "text-transform": oneOf("none", "uppercase", "lowercase", "capitalize"),
   "letter-spacing": (v) => v === "normal" || isLength(v),
   "white-space": oneOf("normal", "pre", "pre-wrap", "pre-line", "break-spaces"),
-  "line-height": oneOf("normal"),
+  "line-height": (v) => v === "normal" || /^\d*\.?\d+$/.test(v) || isLength(v),
   display: oneOf(
     "none", "inline", "block", "inline-block", "flex", "grid", "list-item",
     "table", "table-row", "table-cell", "table-row-group", "table-header-group", "table-footer-group",
@@ -49,9 +48,8 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   "max-width": (v) => v === "none" || isLength(v),
   "margin-top": (v) => v === "auto" || isLength(v),
   "margin-bottom": (v) => v === "auto" || isLength(v),
-  // Horizontal margins are only understood as `auto` (centering) or zero.
-  "margin-left": (v) => v === "auto" || isZero(v),
-  "margin-right": (v) => v === "auto" || isZero(v),
+  "margin-left": (v) => v === "auto" || isLength(v),
+  "margin-right": (v) => v === "auto" || isLength(v),
   "border-radius": isLength,
   "border-collapse": oneOf("collapse"),
   "box-sizing": oneOf("border-box"),

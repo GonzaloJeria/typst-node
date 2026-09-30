@@ -107,6 +107,8 @@ export type Inline =
   | { kind: "link"; href: string; children: Inline[] }
   | { kind: "styled"; style: TextStyle; children: Inline[] }
   | { kind: "box"; style: InlineBoxStyle; children: Inline[] }
+  /** Horizontal space, from inline margins. */
+  | { kind: "space"; width: Length }
   | { kind: "linebreak" }
   | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string }
   /** `position: relative` offset of inline content: painted shifted, laid out in place. */
@@ -129,7 +131,16 @@ export interface TableRow {
 }
 
 export type Block =
-  | { kind: "paragraph"; children: Inline[]; align?: HAlign; justify?: boolean }
+  | {
+      kind: "paragraph";
+      children: Inline[];
+      align?: HAlign;
+      justify?: boolean;
+      /** Gap between lines, when `line-height` differs from the document's. */
+      leading?: Length;
+    }
+  /** Horizontal margins (outside the box, like CSS). */
+  | { kind: "pad"; left?: Length; right?: Length; children: Block[] }
   | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[] }
   | {
       kind: "list";
@@ -198,6 +209,8 @@ export interface Document {
   page?: PageSetup;
   /** Document-wide text defaults (from `body`/`html`). */
   text?: TextStyle;
+  /** Document-wide gap between lines (from the body's `line-height`). */
+  leading?: Length;
   lang?: string;
   children: Block[];
 }

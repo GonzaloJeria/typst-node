@@ -90,8 +90,16 @@ export class Converter {
     return out;
   }
 
+  /** The body's `line-height`, emitted once for the whole document. */
+  baseLineHeight: string | undefined;
+
   #paragraph(children: Inline[], style: ComputedStyle): Block {
     const p: Extract<Block, { kind: "paragraph" }> = { kind: "paragraph", children };
+    const lh = style.props.get("line-height");
+    if (lh !== this.baseLineHeight) {
+      const leading = lineGap(lh, style);
+      if (leading) p.leading = leading;
+    }
     const ta = style.props.get("text-align");
     if (ta === "justify") p.justify = true;
     else {
@@ -141,6 +149,9 @@ export class Converter {
     if (offset) ops.unshift(offset);
     if (ops.length) content = [{ kind: "transform", ops, children: content }];
 
+    const margins = this.#horizontalMargins(style);
+    if (margins && !/^(absolute|fixed)$/.test(position)) content = [{ kind: "pad", ...margins, children: content }];
+
     const running = /^running\(\s*([-\w]+)\s*\)$/.exec(position);
     if (running) {
       if (!this.running.has(running[1]!)) this.running.set(running[1]!, content);
@@ -158,6 +169,18 @@ export class Converter {
     if (before === "page" || before === "left" || before === "right") content.unshift({ kind: "pagebreak", weak: true });
     if (after === "page" || after === "left" || after === "right") content.push({ kind: "pagebreak", weak: true });
     return content;
+  }
+
+  /** Non-auto horizontal margins; `auto` is handled as alignment by the box. */
+  #horizontalMargins(s: ComputedStyle): { left?: Length; right?: Length } | undefined {
+    const ctx = lengthContext(s);
+    const out: { left?: Length; right?: Length } = {};
+    for (const side of ["left", "right"] as const) {
+      const v = s.own.get(`margin-${side}`);
+      const l = v && v !== "auto" ? parseLength(v, ctx) : undefined;
+      if (l && l.value !== 0) out[side] = l;
+    }
+    return out.left || out.right ? out : undefined;
   }
 
   /** `position: relative` offsets: a visual shift that leaves layout untouched. */
@@ -382,6 +405,16 @@ export class Converter {
     }
     const offset = style.own.get("position") === "relative" ? this.#relativeOffset(style) : undefined;
     if (offset?.kind === "translate" && children.length) wrap({ kind: "move", dx: offset.dx, dy: offset.dy, children });
+
+    // Inline margins become horizontal space around the element.
+    const margins = this.#horizontalMargins(style);
+    if (margins && children.length) {
+      children = [
+        ...(margins.left ? [{ kind: "space" as const, width: margins.left }] : []),
+        ...children,
+        ...(margins.right ? [{ kind: "space" as const, width: margins.right }] : []),
+      ];
+    }
     return children;
   }
 
@@ -874,4 +907,21 @@ function unescapeCss(s: string): string {
   return s.replace(/\\([0-9a-fA-F]{1,6})\s?|\\(.)/g, (_, hex: string | undefined, ch: string | undefined) =>
     hex ? String.fromCodePoint(parseInt(hex, 16)) : ch!,
   );
+}
+
+/**
+ * Gap between lines for a CSS `line-height`. Line boxes span the font's
+ * ascender to descender (about 1em), so the gap is the line height minus 1em;
+ * `normal` matches the document default (≈1.2).
+ */
+export function lineGap(value: string | undefined, s: ComputedStyle): Length | undefined {
+  const v = value?.trim();
+  if (!v || v === "normal") return { value: 0.2, unit: "em" };
+  if (/^\d*\.?\d+$/.test(v)) return { value: round(Number(v) - 1), unit: "em" };
+  const l = parseLength(v, lengthContext(s));
+  if (!l) return undefined;
+  if (l.unit === "%") return { value: round(l.value / 100 - 1), unit: "em" };
+  if (l.unit === "em") return { value: round(l.value - 1), unit: "em" };
+  const pt = l.unit === "pt" ? l.value : undefined;
+  return pt === undefined ? undefined : { value: round(pt - s.fontSize), unit: "pt" };
 }

@@ -34,7 +34,7 @@ export function emitDocument(doc: Document): string {
     "bottom-edge": str("descender"),
   };
   lines.push("#" + call("set text", text));
-  lines.push("#" + call("set par", { leading: LINE_GAP }));
+  lines.push("#" + call("set par", { leading: doc.leading ? length(doc.leading) : LINE_GAP }));
   lines.push(`#${seq(doc.children.map(emitBlock))}`);
   return lines.join("\n") + "\n";
 }
@@ -98,6 +98,8 @@ export function emitInline(node: Inline): string {
     }
     case "linebreak":
       return "linebreak()";
+    case "space":
+      return `h(${length(node.width)})`;
     case "move":
       return call("box", {}, call("move", { dx: length(node.dx), dy: length(node.dy) }, inlines(node.children)));
     case "page-counter":
@@ -132,7 +134,14 @@ function imageCall(n: { src: string; width?: Size; height?: Size; alt?: string }
 export function emitBlock(node: Block): string {
   switch (node.kind) {
     case "paragraph": {
-      const body = call("par", { justify: node.justify === undefined ? undefined : String(node.justify) }, inlines(node.children));
+      const body = call(
+        "par",
+        {
+          justify: node.justify === undefined ? undefined : String(node.justify),
+          leading: node.leading && length(node.leading),
+        },
+        inlines(node.children),
+      );
       return node.align ? `align(${align(node.align)}, ${body})` : body;
     }
     case "heading":
@@ -178,6 +187,8 @@ export function emitBlock(node: Block): string {
     }
     case "transform":
       return transform(node.ops, blocks(node.children));
+    case "pad":
+      return call("pad", { left: node.left && length(node.left), right: node.right && length(node.right) }, blocks(node.children));
     case "styled-block":
       return call("text", textArgs(node.style), blocks(node.children));
     case "table": {

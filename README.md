@@ -89,8 +89,11 @@ y `@bottom-left|center|right`, con `content` de texto, `counter(page)`,
 `counter(pages)` y `element(nombre)` para mover al margen HTML marcado con
 `position: running(nombre)` (por ejemplo, un logo).
 
-**Todavía no:** `float`, márgenes horizontales distintos de `auto`/0, `height`,
-`line-height`, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
+**Espaciado:** márgenes horizontales (`pad` en bloques, espacio en elementos
+inline, combinables con `auto`) y `line-height` (número, %, longitud;
+`normal` ≈ 1.2).
+
+**Todavía no:** `float`, `height`, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
 selectores `@page :first`/`:left`, imágenes de fondo.
 
 Nada se descarta en silencio: cada propiedad o valor que no se sabe renderizar

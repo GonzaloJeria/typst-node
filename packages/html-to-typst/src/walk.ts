@@ -35,6 +35,7 @@ function mapBlocks(blocks: Block[], fn: (src: string) => string | null): Block[]
       case "styled-block":
       case "place":
       case "transform":
+      case "pad":
         b.children = mapBlocks(b.children, fn);
         return [b];
       case "grid":
@@ -82,7 +83,7 @@ export function documentText(doc: Document): string {
       switch (b.kind) {
         case "paragraph": case "heading": inl(b.children); break;
         case "list": b.items.forEach(blk); break;
-        case "box": case "styled-block": case "place": case "transform": blk(b.children); break;
+        case "box": case "styled-block": case "place": case "transform": case "pad": blk(b.children); break;
         case "grid": b.cells.forEach(blk); break;
         case "raw-block": out.push(b.value); break;
         case "table":
