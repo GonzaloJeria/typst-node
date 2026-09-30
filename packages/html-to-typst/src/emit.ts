@@ -1,4 +1,4 @@
-import type { Block, BoxStyle, Sides, Stroke, Document, Inline, MarginBand, MarginBox, Shadow, Size, TableCell, TableRow, TextStyle, TransformOp } from "./ir.js";
+import type { Block, BoxStyle, PageRun, PageSetup, Sides, Stroke, Document, Inline, MarginBand, MarginBox, Shadow, Size, TableCell, TableRow, TextStyle, TransformOp } from "./ir.js";
 import { align, call, color, length, num, paint, sides, size, str, stroke } from "./literals.js";
 
 /**
@@ -8,23 +8,7 @@ import { align, call, color, length, num, paint, sides, size, str, stroke } from
  */
 export function emitDocument(doc: Document): string {
   const lines: string[] = [];
-  if (doc.page) {
-    const p = doc.page;
-    lines.push(
-      "#" +
-        call("set page", {
-          paper: p.paper === undefined ? undefined : str(p.paper),
-          flipped: p.flipped ? "true" : undefined,
-          width: p.width && length(p.width),
-          height: p.height && length(p.height),
-          margin: p.margin && sides(p.margin, length),
-          fill: p.fill && paint(p.fill),
-          header: p.header && band(p.header),
-          footer: p.footer && band(p.footer),
-          foreground: p.foreground && blocks(p.foreground),
-        }),
-    );
-  }
+  if (doc.page) lines.push("#" + call("set page", pageArgs(doc.page)));
   // CSS line boxes span the font's ascender to descender; Typst's default
   // cap-height/baseline edges would let lines of text touch or overlap.
   const text = {
@@ -37,6 +21,43 @@ export function emitDocument(doc: Document): string {
   lines.push("#" + call("set par", { leading: doc.leading ? length(doc.leading) : LINE_GAP }));
   lines.push(`#${seq(doc.children.map(emitBlock))}`);
   return lines.join("\n") + "\n";
+}
+
+function pageArgs(p: PageSetup): Record<string, string | undefined> {
+  const first = p.first;
+  const decorate = (value: MarginBand | null | undefined, override: MarginBand | null | undefined, has: boolean) => {
+    const base = value === null ? "none" : value && band(value);
+    if (!has) return base;
+    const alt = override ? band(override) : "none";
+    return `context if here().page() == 1 { ${alt} } else { ${base ?? "none"} }`;
+  };
+  const firstFill = first && "fill" in first;
+  return {
+    paper: p.paper === undefined ? undefined : str(p.paper),
+    flipped: p.flipped ? "true" : undefined,
+    width: p.width && length(p.width),
+    height: p.height && length(p.height),
+    margin: p.margin && sides(p.margin, length),
+    fill: p.fill && paint(p.fill),
+    // `fill` cannot vary per page, so a different first-page fill is painted as background.
+    background: firstFill
+      ? `context if here().page() == 1 { ${call("rect", { width: "100%", height: "100%", fill: first.fill ? paint(first.fill) : "white" })} }`
+      : undefined,
+    header: first && "header" in first ? decorate(p.header, first.header, true) : decorate(p.header, undefined, false),
+    footer: first && "footer" in first ? decorate(p.footer, first.footer, true) : decorate(p.footer, undefined, false),
+    foreground: p.foreground && blocks(p.foreground),
+  };
+}
+
+function pageRun(run: PageRun): string {
+  const body: string[] = [call("pagebreak", { weak: "true" })];
+  if (run.page) body.push(call("set page", pageArgs(run.page)));
+  if (run.text || run.lang) {
+    body.push(call("set text", { ...textArgs(run.text ?? {}), lang: run.lang === undefined ? undefined : str(run.lang) }));
+  }
+  if (run.leading) body.push(call("set par", { leading: length(run.leading) }));
+  body.push(...run.children.map(emitBlock));
+  return `{\n${body.map((i) => indent(i)).join("\n")}\n}`;
 }
 
 /** Gap between line boxes that approximates `line-height: normal` (≈1.2). */
@@ -226,6 +247,8 @@ export function emitBlock(node: Block): string {
       return call("raw", { block: "true", lang: node.lang === undefined ? undefined : str(node.lang) }, str(node.value));
     case "rule":
       return "line(length: 100%)";
+    case "page-run":
+      return pageRun(node);
     case "pagebreak":
       return call("pagebreak", { weak: node.weak ? "true" : undefined });
     case "image":
@@ -303,6 +326,11 @@ function marginBox(box: MarginBox | undefined): string {
 
 /** `@page` margin boxes as a three-column band (left, center, right). */
 function band(b: MarginBand): string {
+  const slots = (["left", "center", "right"] as const).filter((k) => b[k]);
+  if (slots.length === 1) {
+    const k = slots[0]!;
+    return `align(${k === "center" ? "center" : k} + horizon, ${marginBox(b[k])})`;
+  }
   return call(
     "grid",
     { columns: "(1fr, auto, 1fr)", "column-gutter": "1em" },

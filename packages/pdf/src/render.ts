@@ -1,4 +1,4 @@
-import { htmlToTypst, mapImages, emitDocument, type TranspileOptions } from "html-to-typst";
+import { composeToTypst, htmlToTypst, mapImages, emitDocument, type ComposeInput, type TranspileOptions } from "html-to-typst";
 import {
   CliBackend,
   type CliBackendOptions,
@@ -37,6 +37,9 @@ interface Prepared {
   warnings: string[];
 }
 
+/** A single HTML document, or sections composed over a shared layout. */
+export type RenderInput = string | ComposeInput;
+
 export interface PdfRendererOptions {
   /** Backend to use; defaults to a `CliBackend` owned by the renderer. */
   backend?: TypstBackend;
@@ -58,7 +61,7 @@ export class PdfRenderer {
     this.#defaults = options.defaults ?? {};
   }
 
-  async render(html: string, options: RenderOptions = {}): Promise<PdfResult> {
+  async render(html: RenderInput, options: RenderOptions = {}): Promise<PdfResult> {
     const opts = this.#merge(options);
     const prepared = await prepare(html, opts);
     const result = await this.backend.compile({
@@ -69,7 +72,7 @@ export class PdfRenderer {
     return { pdf: result.pdf, warnings: prepared.warnings, diagnostics: result.warnings, source: prepared.source };
   }
 
-  async renderPages(html: string, options: RenderOptions & { format?: PageFormat; ppi?: number } = {}): Promise<PagesResult> {
+  async renderPages(html: RenderInput, options: RenderOptions & { format?: PageFormat; ppi?: number } = {}): Promise<PagesResult> {
     const opts = this.#merge(options);
     const prepared = await prepare(html, opts);
     const result = await this.backend.compilePages({
@@ -98,8 +101,8 @@ export class PdfRenderer {
   }
 }
 
-async function prepare(html: string, opts: RenderOptions): Promise<Prepared> {
-  const transpiled = htmlToTypst(html, opts);
+async function prepare(input: RenderInput, opts: RenderOptions): Promise<Prepared> {
+  const transpiled = typeof input === "string" ? htmlToTypst(input, opts) : composeToTypst(input, opts);
   const assets = await resolveAssets(transpiled.assets, opts.assets, opts.signal);
   mapImages(transpiled.document, (src) => {
     const mapped = assets.mapping.get(src);
@@ -124,13 +127,13 @@ function compileExtras(opts: RenderOptions) {
 let shared: PdfRenderer | undefined;
 
 /** Converts HTML to a PDF with a process-wide default renderer. */
-export function htmlToPdf(html: string, options?: RenderOptions): Promise<PdfResult> {
+export function htmlToPdf(html: RenderInput, options?: RenderOptions): Promise<PdfResult> {
   shared ??= new PdfRenderer();
   return shared.render(html, options);
 }
 
 /** Renders HTML to one image per page with the process-wide default renderer. */
-export function htmlToPages(html: string, options?: RenderOptions & { format?: PageFormat; ppi?: number }): Promise<PagesResult> {
+export function htmlToPages(html: RenderInput, options?: RenderOptions & { format?: PageFormat; ppi?: number }): Promise<PagesResult> {
   shared ??= new PdfRenderer();
   return shared.renderPages(html, options);
 }

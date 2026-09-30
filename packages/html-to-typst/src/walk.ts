@@ -1,4 +1,4 @@
-import type { Block, Document, Inline, MarginBand } from "./ir.js";
+import type { Block, Document, Inline, MarginBand, PageSetup } from "./ir.js";
 
 type Image = { src: string };
 
@@ -8,10 +8,12 @@ type Image = { src: string };
  */
 export function mapImages(doc: Document, fn: (src: string) => string | null): void {
   doc.children = mapBlocks(doc.children, fn);
-  const page = doc.page;
-  if (!page) return;
+  if (doc.page) mapPage(doc.page, fn);
+}
+
+function mapPage(page: PageSetup, fn: (src: string) => string | null): void {
   if (page.foreground) page.foreground = mapBlocks(page.foreground, fn);
-  for (const band of [page.header, page.footer]) {
+  for (const band of [page.header, page.footer, page.first?.header, page.first?.footer]) {
     for (const box of Object.values(band ?? {})) {
       if (box?.blocks) box.blocks = mapBlocks(box.blocks, fn);
       if (box?.inlines) box.inlines = mapInlines(box.inlines, fn);
@@ -36,6 +38,10 @@ function mapBlocks(blocks: Block[], fn: (src: string) => string | null): Block[]
       case "place":
       case "transform":
       case "pad":
+        b.children = mapBlocks(b.children, fn);
+        return [b];
+      case "page-run":
+        if (b.page) mapPage(b.page, fn);
         b.children = mapBlocks(b.children, fn);
         return [b];
       case "grid":
@@ -85,6 +91,12 @@ export function documentText(doc: Document): string {
         case "list": b.items.forEach(blk); break;
         case "box": case "styled-block": case "place": case "transform": case "pad": blk(b.children); break;
         case "grid": b.cells.forEach(blk); break;
+        case "page-run":
+          bandBlocks(b.page?.header);
+          blk(b.children);
+          blk(b.page?.foreground ?? []);
+          bandBlocks(b.page?.footer);
+          break;
         case "raw-block": out.push(b.value); break;
         case "table":
           for (const rows of [b.header, b.body, b.footer]) {
@@ -97,7 +109,7 @@ export function documentText(doc: Document): string {
   };
   // Content moved to page margins and the page foreground, in document order
   // it would have had: running headers first, then the body, then fixed/footer.
-  const bandBlocks = (band: MarginBand | undefined) =>
+  const bandBlocks = (band: MarginBand | null | undefined) =>
     Object.values(band ?? {}).forEach((box) => (box?.blocks ? blk(box.blocks) : box?.inlines && inl(box.inlines)));
   bandBlocks(doc.page?.header);
   blk(doc.children);

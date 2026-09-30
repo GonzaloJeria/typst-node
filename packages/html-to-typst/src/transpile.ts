@@ -67,9 +67,33 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   // Paged media paints the canvas with the root/body background.
   const fill = page.fill ?? paintOf(bodyStyle.own) ?? paintOf(htmlStyle.own);
   if (fill) page.fill = fill;
-  const bands = marginBands(sheet.pageBoxes, converter, bodyStyle.fontSize, cascade.rootFontSize);
+  const bandsOf = (boxes: Record<string, Declaration[]>) => marginBands(boxes, converter, bodyStyle.fontSize, cascade.rootFontSize);
+  const bands = bandsOf(sheet.pageBoxes);
   if (bands.header) page.header = bands.header;
   if (bands.footer) page.footer = bands.footer;
+  const first = sheet.namedPages[":first"];
+  if (first) {
+    const setup = pageSetup(first.page, ctx, converter.warnings, true);
+    const fb = bandsOf({ ...sheet.pageBoxes, ...first.pageBoxes });
+    page.first = {};
+    if (setup?.fill) page.first.fill = setup.fill;
+    if (!same(fb.header, bands.header)) page.first.header = fb.header ?? null;
+    if (!same(fb.footer, bands.footer)) page.first.footer = fb.footer ?? null;
+    if (!Object.keys(page.first).length) delete page.first;
+  }
+  // Named pages: each run overrides the default setup where its @page rule says so.
+  document.children = resolveRuns(document.children, true, (name) => {
+    const rule = sheet.namedPages[name];
+    if (!rule) return undefined;
+    const setup = pageSetup(rule.page, ctx, converter.warnings) ?? {};
+    const nb = bandsOf({ ...sheet.pageBoxes, ...rule.pageBoxes });
+    if (!same(nb.header, bands.header)) setup.header = nb.header ?? null;
+    if (!same(nb.footer, bands.footer)) setup.footer = nb.footer ?? null;
+    return Object.keys(setup).length ? setup : undefined;
+  }, converter.warnings);
+  for (const selector of Object.keys(sheet.namedPages)) {
+    if (/.:first$/.test(selector)) converter.warnings.add(`Unsupported @page selector ignored: @page ${selector}`);
+  }
   if (converter.foreground.length) page.foreground = converter.foreground;
   if (Object.keys(page).length) document.page = page;
   for (const w of sheet.warnings) converter.warnings.add(w);
@@ -83,6 +107,40 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   return { source: emitDocument(document), document, warnings, assets };
 }
 
+/**
+ * Attaches named page setups to page runs. A page setup can only change
+ * between top-level blocks, so runs nested in styled containers are unwrapped.
+ */
+function resolveRuns(
+  blocks: Block[],
+  topLevel: boolean,
+  setupOf: (name: string) => PageSetup | undefined,
+  warnings: Set<string>,
+): Block[] {
+  return blocks.flatMap((b): Block[] => {
+    if (b.kind === "page-run") {
+      const children = resolveRuns(b.children, topLevel, setupOf, warnings);
+      if (!topLevel) {
+        warnings.add(`page: ${b.name} ignored: named pages only apply to top-level elements (not inside styled containers)`);
+        return children;
+      }
+      const page = b.name ? setupOf(b.name) : undefined;
+      return [{ ...b, ...(page ? { page } : {}), children }];
+    }
+    if (b.kind === "box" || b.kind === "styled-block" || b.kind === "place" || b.kind === "transform" || b.kind === "pad") {
+      b.children = resolveRuns(b.children, false, setupOf, warnings);
+    }
+    if (b.kind === "list") b.items = b.items.map((i) => resolveRuns(i, false, setupOf, warnings));
+    if (b.kind === "grid") b.cells = b.cells.map((c) => resolveRuns(c, false, setupOf, warnings));
+    if (b.kind === "table") {
+      for (const rows of [b.header, b.body, b.footer]) {
+        for (const row of rows ?? []) for (const cell of row.cells) cell.children = resolveRuns(cell.children, false, setupOf, warnings);
+      }
+    }
+    return [b];
+  });
+}
+
 const UA_CSS = `
   small { font-size: smaller }
   big { font-size: larger }
@@ -94,9 +152,13 @@ const PAPER: Record<string, string> = {
   a3: "a3", a4: "a4", a5: "a5", b4: "iso-b4", b5: "iso-b5", letter: "us-letter", legal: "us-legal", ledger: "us-tabloid",
 };
 
-function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<string>): PageSetup | undefined {
+function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<string>, first = false): PageSetup | undefined {
   const page: PageSetup = {};
   for (const d of decls) {
+    if (first && !/^background/.test(d.property)) {
+      warnings.add(`Unsupported @page :first property ignored: ${d.property} (only backgrounds and margin boxes)`);
+      continue;
+    }
     if (d.property === "size") {
       const tokens = splitValue(d.value.toLowerCase());
       for (const t of tokens) {
@@ -129,6 +191,10 @@ function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<strin
     }
   }
   return Object.keys(page).length ? page : undefined;
+}
+
+function same(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function round(n: number): number {

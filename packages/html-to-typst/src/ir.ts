@@ -141,6 +141,7 @@ export type Block =
     }
   /** Horizontal margins (outside the box, like CSS). */
   | { kind: "pad"; left?: Length; right?: Length; children: Block[] }
+  | PageRun
   | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[] }
   | {
       kind: "list";
@@ -199,10 +200,34 @@ export interface PageSetup {
   height?: Length;
   margin?: Sides<Length>;
   fill?: Paint;
-  header?: MarginBand;
-  footer?: MarginBand;
+  /** `null` removes an inherited header (e.g. a named page with `content: none`). */
+  header?: MarginBand | null;
+  footer?: MarginBand | null;
   /** Content repeated on every page above the body (`position: fixed`). */
   foreground?: Block[];
+  /** Overrides for the document's first page (`@page :first`). */
+  first?: FirstPage;
+}
+
+export interface FirstPage {
+  header?: MarginBand | null;
+  footer?: MarginBand | null;
+  fill?: Paint | null;
+}
+
+/**
+ * A run of pages with its own page setup: a CSS named page (`page: name`) or a
+ * composed section. Nested runs inherit whatever setup they do not override.
+ */
+export interface PageRun {
+  kind: "page-run";
+  /** CSS page name, resolved against `@page name` rules. */
+  name?: string;
+  page?: PageSetup;
+  text?: TextStyle;
+  leading?: Length;
+  lang?: string;
+  children: Block[];
 }
 
 export interface Document {

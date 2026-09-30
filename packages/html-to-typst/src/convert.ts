@@ -80,15 +80,30 @@ export class Converter {
       if (display === "none") continue;
       if (display === "inline") {
         this.#inlineInto(run, child, cs, style);
-      } else {
-        flush();
-        out.push(...this.#block(child, cs, style));
+        continue;
       }
+      flush();
+      const name = cs.own.get("page")?.toLowerCase();
+      if (!name || name === "auto" || name === this.#pageName) {
+        out.push(...this.#block(child, cs, style));
+        continue;
+      }
+      // A different named page starts a new page run; adjacent siblings share it.
+      const outer = this.#pageName;
+      this.#pageName = name;
+      const content = this.#block(child, cs, style);
+      this.#pageName = outer;
+      const last = out.at(-1);
+      if (last?.kind === "page-run" && last.name === name) last.children.push(...content);
+      else if (content.length) out.push({ kind: "page-run", name, children: content });
     }
     this.#pseudo(run, container, style, "after");
     flush();
     return out;
   }
+
+  /** CSS page name of the run being converted (`page` property). */
+  #pageName: string | undefined;
 
   /** The body's `line-height`, emitted once for the whole document. */
   baseLineHeight: string | undefined;
@@ -333,9 +348,14 @@ export class Converter {
     this.#validate(ps, `${el.tagName}::${which}`);
     const content = ps.own.get("content");
     if (!content || ps.props.get("display") === "none") return;
-    const text = parseContent(content, el, (msg) => this.warnings.add(`${msg} (<${el.tagName}::${which}>)`));
-    if (!text) return;
-    const children = run.nested(() => run.text(text, ps.props));
+    const parts = parseContent(content, el, (msg) => this.warnings.add(`${msg} (<${el.tagName}::${which}>)`));
+    if (!parts.length) return;
+    const children = run.nested(() => {
+      for (const part of parts) {
+        if (typeof part === "string") run.text(part, ps.props);
+        else run.push({ kind: "page-counter", which: part.counter }, false);
+      }
+    });
     run.splice(this.#decorate(children, "", ps, style));
   }
 
@@ -887,20 +907,29 @@ function transformText(value: string, transform: string | undefined): string {
 }
 
 /** Evaluates a CSS `content` value: strings (with escapes), attr(), quotes. */
-function parseContent(value: string, el: Element, warn: (message: string) => void): string {
+function parseContent(value: string, el: Element, warn: (message: string) => void): ContentPart[] {
   const v = value.trim();
-  if (v === "none" || v === "normal") return "";
-  let out = "";
-  const re = /"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|attr\(\s*([-\w]+)\s*\)|(open-quote|close-quote|no-open-quote|no-close-quote)|(\S+\([^)]*\)|\S+)/g;
+  if (v === "none" || v === "normal") return [];
+  const out: ContentPart[] = [];
+  const text = (t: string) => {
+    if (!t) return;
+    if (typeof out.at(-1) === "string") out[out.length - 1] += t;
+    else out.push(t);
+  };
+  const re = /"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|attr\(\s*([-\w]+)\s*\)|counter\(\s*(page|pages)\s*\)|(open-quote|close-quote|no-open-quote|no-close-quote)|(\S+\([^)]*\)|\S+)/g;
   for (const m of v.matchAll(re)) {
-    if (m[1] !== undefined || m[2] !== undefined) out += unescapeCss(m[1] ?? m[2]!);
-    else if (m[3]) out += attr(el, m[3]) ?? "";
-    else if (m[4] === "open-quote") out += "“";
-    else if (m[4] === "close-quote") out += "”";
-    else if (m[5]) warn(`Unsupported content value ignored: ${m[5]}`);
+    if (m[1] !== undefined || m[2] !== undefined) text(unescapeCss(m[1] ?? m[2]!));
+    else if (m[3]) text(attr(el, m[3]) ?? "");
+    else if (m[4]) out.push({ counter: m[4] as "page" | "pages" });
+    else if (m[5] === "open-quote") text("“");
+    else if (m[5] === "close-quote") text("”");
+    else if (m[6]) warn(`Unsupported content value ignored: ${m[6]}`);
   }
   return out;
 }
+
+/** Generated content: text, or a page counter (only meaningful when rendered in pages). */
+type ContentPart = string | { counter: "page" | "pages" };
 
 /** Resolves CSS string escapes such as `\2713 ` and `\"`. */
 function unescapeCss(s: string): string {

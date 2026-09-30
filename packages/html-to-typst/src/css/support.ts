@@ -55,6 +55,7 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   "box-sizing": oneOf("border-box"),
   "break-before": oneOf("auto", "page", "always", "left", "right", "avoid"),
   "break-after": oneOf("auto", "page", "always", "left", "right", "avoid"),
+  page: (v) => /^(?:auto|-?[_a-zA-Z][-\w]*)$/.test(v),
   "break-inside": oneOf("auto", "avoid", "avoid-page"),
   "list-style-type": (v) => LIST_STYLES.has(v) || /^(["']).*\1$/.test(v),
   "list-style-other": oneOf("outside"),
