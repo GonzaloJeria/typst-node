@@ -19,8 +19,8 @@ describe("never fails silently", () => {
   });
 
   it("warns about background layers it cannot paint", () => {
-    const { warnings } = doc('<div style="background: url(x.png) no-repeat #fff">x</div>');
-    expect(warnings).toEqual(["Unsupported CSS value ignored: background: url(x.png) no-repeat (<div>)"]);
+    const { warnings } = doc('<div style="background: url(x.png) repeat-x #fff">x</div>');
+    expect(warnings).toEqual(["Unsupported CSS value ignored: background-repeat: repeat-x (<div>)"]);
   });
 
   it("warns about undefined variables", () => {

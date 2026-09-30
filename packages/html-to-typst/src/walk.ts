@@ -34,6 +34,13 @@ function mapBlocks(blocks: Block[], fn: (src: string) => string | null): Block[]
         b.items = b.items.map((item) => mapBlocks(item, fn));
         return [b];
       case "box":
+        if (b.style.image) {
+          const src = fn(b.style.image.src);
+          if (src === null) delete b.style.image;
+          else b.style.image.src = src;
+        }
+        b.children = mapBlocks(b.children, fn);
+        return [b];
       case "styled-block":
       case "place":
       case "transform":

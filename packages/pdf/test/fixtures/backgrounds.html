@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+<style>
+  @page { size: A5; margin: 16mm }
+  @page cover { margin: 0 }
+  body { font-family: sans-serif; font-size: 10pt; color: #1e1b4b }
+  .cover { page: cover; box-sizing: border-box; height: 100%; padding: 30mm 16mm;
+    background: #1e1b4b url("assets/mountains.svg") center / cover no-repeat; color: white }
+  .cover h1 { font-size: 30pt; margin: 0 }
+  .cover p { color: #fce7f3; font-size: 12pt }
+  .card { min-height: 32mm; padding: 10pt; margin-bottom: 10pt; border: 1px solid #c7d2fe; border-radius: 8pt;
+    background: #eef2ff url(assets/logo.svg) right bottom / 18mm no-repeat }
+  .banner { height: 20mm; border-radius: 6pt; background-image: url(assets/mountains.svg); background-size: 100% 100% }
+  .card h2 { margin: 0 0 4pt; font-size: 12pt }
+</style>
+</head>
+<body>
+  <section class="cover">
+    <h1>Viaje al sur</h1>
+    <p>Guía de expedición · Temporada 2026</p>
+  </section>
+  <div class="banner"></div>
+  <div class="card"><h2>Día 1</h2><p>Llegada y reconocimiento del terreno.</p></div>
+  <div class="card"><h2>Día 2</h2><p>Ascenso al mirador. La tarjeta mantiene su altura mínima aunque el texto sea corto.</p></div>
+</body>
+</html>

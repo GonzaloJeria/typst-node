@@ -187,14 +187,25 @@ function expandShorthand(property: string, value: string): [string, string][] {
   if (alias) return [[alias, value === "always" ? "page" : value]];
 
   if (property === "background") {
-    // Color and gradient layers are supported; images, position and size are not.
+    // One layer: color, gradient or url(), plus position / size and repeat.
     const tokens = splitValue(value).map((t) => t.replace(/,$/, ""));
     const color = tokens.find((t) => parseColor(t) !== undefined);
-    const gradient = tokens.find((t) => /^(?:repeating-)?(?:linear|radial)-gradient\(/i.test(t));
-    const rest = tokens.filter((t) => t !== color && t !== gradient);
+    const image = tokens.find((t) => /^(?:(?:repeating-)?(?:linear|radial)-gradient|url)\(/i.test(t));
     const out: [string, string][] = [];
     if (color) out.push(["background-color", color]);
-    if (gradient) out.push(["background-image", gradient]);
+    if (image) out.push(["background-image", image]);
+    let rest = tokens.filter((t) => t !== color && t !== image);
+    const repeat = rest.find((t) => /^(?:no-repeat|repeat|repeat-x|repeat-y|space|round)$/.test(t));
+    if (repeat) out.push(["background-repeat", repeat]);
+    rest = rest.filter((t) => t !== repeat);
+    const slash = rest.indexOf("/");
+    if (slash !== -1) {
+      out.push(["background-size", rest.slice(slash + 1).join(" ")]);
+      rest = rest.slice(0, slash);
+    }
+    const position = rest.filter((t) => /^(?:center|top|bottom|left|right)$/.test(t));
+    if (position.length) out.push(["background-position", position.join(" ")]);
+    rest = rest.filter((t) => !position.includes(t) && t !== "scroll" && !/^(?:border|padding)-box$/.test(t));
     if (rest.length) out.push(["background-other", rest.join(" ")]);
     return out;
   }

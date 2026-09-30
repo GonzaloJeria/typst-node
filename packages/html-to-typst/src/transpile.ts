@@ -5,6 +5,7 @@ import { expandBox, parseColor, parseFontSize, parseGradient, parseLength, split
 import { Converter, lineGap, type ConvertOptions } from "./convert.js";
 import { attr, findAll, findFirst, isText } from "./dom.js";
 import { emitDocument } from "./emit.js";
+import { mapImages } from "./walk.js";
 import type { Block, Document, Inline, Length, MarginBand, MarginBox, PageSetup, Paint, TextStyle } from "./ir.js";
 
 export interface TranspileOptions extends ConvertOptions {
@@ -103,7 +104,10 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   const warnings = [...converter.warnings, ...cascade.warnings];
   if (options.strict && warnings.length) throw new TranspileError(warnings);
 
-  const assets = [...new Set(findAll(doc, "img").map((img) => attr(img, "src")).filter((s): s is string => !!s))];
+  // Every image the document references: <img> and CSS background images.
+  const found = new Set<string>();
+  mapImages(document, (src) => (found.add(src), src));
+  const assets = [...found];
   return { source: emitDocument(document), document, warnings, assets };
 }
 

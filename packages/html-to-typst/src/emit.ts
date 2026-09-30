@@ -1,4 +1,4 @@
-import type { Block, BoxStyle, PageRun, PageSetup, Sides, Stroke, Document, Inline, MarginBand, MarginBox, Shadow, Size, TableCell, TableRow, TextStyle, TransformOp } from "./ir.js";
+import type { Block, BoxStyle, Length, PageRun, PageSetup, Sides, Stroke, Document, Inline, MarginBand, MarginBox, Shadow, Size, TableCell, TableRow, TextStyle, TransformOp } from "./ir.js";
 import { align, call, color, length, num, paint, sides, size, str, stroke } from "./literals.js";
 
 /**
@@ -182,25 +182,8 @@ export function emitBlock(node: Block): string {
           )
         : call("list", { marker: node.marker === undefined ? undefined : node.marker === "" ? "[]" : str(node.marker) }, ...items);
     }
-    case "box": {
-      const s = node.style;
-      let b = call(
-        "block",
-        {
-          width: s.width && size(s.width),
-          inset: s.inset && sides(s.inset, length),
-          fill: s.fill && paint(s.fill),
-          stroke: s.stroke && sides(s.stroke, stroke),
-          radius: s.radius && length(s.radius),
-          above: s.above && length(s.above),
-          below: s.below && length(s.below),
-          breakable: s.breakable === undefined ? undefined : String(s.breakable),
-        },
-        blocks(node.children),
-      );
-      if (s.shadows?.length) b = shadowed(b, s);
-      return s.align ? `align(${align(s.align)}, ${b})` : b;
-    }
+    case "box":
+      return boxBlock(node.style, node.children);
     case "place": {
       const dx = node.x === "left" ? length(node.dx) : `-${length(node.dx)}`;
       const dy = node.y === "top" ? length(node.dy) : `-${length(node.dy)}`;
@@ -292,6 +275,61 @@ const BLUR_STEPS = 4;
  * Paints `box-shadow` layers behind a block. Typst has no shadows, so the
  * block is measured and translucent rounded rectangles are placed under it.
  */
+function boxBlock(s: BoxStyle, children: Block[]): string {
+  const vpad = [s.inset?.top, s.inset?.bottom].filter((l): l is Length => !!l).map(length);
+  // CSS heights exclude padding unless border-box; Typst's include it.
+  const outer = (l: Length) => (s.borderBox || !vpad.length ? length(l) : [length(l), ...vpad].join(" + "));
+  const inner = (l: Length) => (!s.borderBox || !vpad.length ? length(l) : [length(l), ...vpad].join(" - "));
+  let body = blocks(children);
+  // A zero-width strut column keeps the row at least `min-height` tall.
+  if (s.minHeight) body = call("grid", { columns: "(0pt, 1fr)" }, call("block", { height: inner(s.minHeight) }), body);
+  const spacing = {
+    above: s.above && length(s.above),
+    below: s.below && length(s.below),
+    breakable: s.breakable === undefined ? undefined : String(s.breakable),
+  };
+  const args = {
+    width: s.width && size(s.width),
+    height: s.height && outer(s.height),
+    inset: s.inset && sides(s.inset, length),
+    fill: s.fill && paint(s.fill),
+    stroke: s.stroke && sides(s.stroke, stroke),
+    radius: s.radius && length(s.radius),
+  };
+  let b = s.image ? withBackground(s, args, spacing, body) : call("block", { ...args, ...spacing }, body);
+  if (s.shadows?.length) b = shadowed(b, s);
+  return s.align ? `align(${align(s.align)}, ${b})` : b;
+}
+
+/** Paints a background image under the box content, clipped to the box. */
+function withBackground(
+  s: BoxStyle,
+  args: Record<string, string | undefined>,
+  spacing: Record<string, string | undefined>,
+  body: string,
+): string {
+  const img = s.image!;
+  const fit = img.fit;
+  const picture = typeof fit === "string"
+    ? call("image", { width: "100%", height: "100%", fit: str(fit) }, str(img.src))
+    : call("image", { width: fit.width && length(fit.width), height: fit.height && length(fit.height) }, str(img.src));
+  const layer = call(
+    "block",
+    { width: "m.width", height: "m.height", radius: args.radius, fill: args.fill, clip: "true" },
+    `align(${img.align.x} + ${img.align.y}, ${picture})`,
+  );
+  return [
+    "layout(size => {",
+    indent(`let body = ${call("block", { ...args, fill: undefined }, body)}`),
+    "  let m = measure(body, width: size.width, height: size.height)",
+    `  ${call("block", { ...spacing, breakable: "false" }, `{
+    place(${layer})
+    body
+  }`)}`,
+    "})",
+  ].join("\n");
+}
+
 function shadowed(block: string, style: BoxStyle): string {
   const radius = style.radius ? length(style.radius) : "0pt";
   const layers = (style.shadows ?? []).flatMap((sh: Shadow) => {
@@ -307,7 +345,7 @@ function shadowed(block: string, style: BoxStyle): string {
   return [
     "layout(size => {",
     indent(`let body = ${block}`),
-    "  let m = measure(body, width: size.width)",
+    "  let m = measure(body, width: size.width, height: size.height)",
     `  block(breakable: false, {\n${layers.map((l) => indent(indent(l))).join("\n")}\n    body\n  })`,
     "})",
   ].join("\n");
