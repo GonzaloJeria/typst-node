@@ -114,7 +114,7 @@ describe("@page", () => {
     ]);
     // The running element leaves the flow.
     expect(r.document.children).toHaveLength(1);
-    expect(r.warnings).toEqual(["Unsupported @page margin box ignored: @left-middle", "Unsupported @page selector ignored: @page :first"]);
+    expect(r.warnings).toEqual(["Unsupported @page margin box ignored: @left-middle", "Unsupported @page :first property ignored: margin (only backgrounds and margin boxes)"]);
     expect(r.source).toContain("context counter(page).display()");
     expect(r.source).toContain("context str(counter(page).final().first())");
   });

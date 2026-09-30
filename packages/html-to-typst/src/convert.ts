@@ -80,18 +80,41 @@ export class Converter {
       if (display === "none") continue;
       if (display === "inline") {
         this.#inlineInto(run, child, cs, style);
-      } else {
-        flush();
-        out.push(...this.#block(child, cs, style));
+        continue;
       }
+      flush();
+      const name = cs.own.get("page")?.toLowerCase();
+      if (!name || name === "auto" || name === this.#pageName) {
+        out.push(...this.#block(child, cs, style));
+        continue;
+      }
+      // A different named page starts a new page run; adjacent siblings share it.
+      const outer = this.#pageName;
+      this.#pageName = name;
+      const content = this.#block(child, cs, style);
+      this.#pageName = outer;
+      const last = out.at(-1);
+      if (last?.kind === "page-run" && last.name === name) last.children.push(...content);
+      else if (content.length) out.push({ kind: "page-run", name, children: content });
     }
     this.#pseudo(run, container, style, "after");
     flush();
     return out;
   }
 
+  /** CSS page name of the run being converted (`page` property). */
+  #pageName: string | undefined;
+
+  /** The body's `line-height`, emitted once for the whole document. */
+  baseLineHeight: string | undefined;
+
   #paragraph(children: Inline[], style: ComputedStyle): Block {
     const p: Extract<Block, { kind: "paragraph" }> = { kind: "paragraph", children };
+    const lh = style.props.get("line-height");
+    if (lh !== this.baseLineHeight) {
+      const leading = lineGap(lh, style);
+      if (leading) p.leading = leading;
+    }
     const ta = style.props.get("text-align");
     if (ta === "justify") p.justify = true;
     else {
@@ -141,6 +164,9 @@ export class Converter {
     if (offset) ops.unshift(offset);
     if (ops.length) content = [{ kind: "transform", ops, children: content }];
 
+    const margins = this.#horizontalMargins(style);
+    if (margins && !/^(absolute|fixed)$/.test(position)) content = [{ kind: "pad", ...margins, children: content }];
+
     const running = /^running\(\s*([-\w]+)\s*\)$/.exec(position);
     if (running) {
       if (!this.running.has(running[1]!)) this.running.set(running[1]!, content);
@@ -158,6 +184,18 @@ export class Converter {
     if (before === "page" || before === "left" || before === "right") content.unshift({ kind: "pagebreak", weak: true });
     if (after === "page" || after === "left" || after === "right") content.push({ kind: "pagebreak", weak: true });
     return content;
+  }
+
+  /** Non-auto horizontal margins; `auto` is handled as alignment by the box. */
+  #horizontalMargins(s: ComputedStyle): { left?: Length; right?: Length } | undefined {
+    const ctx = lengthContext(s);
+    const out: { left?: Length; right?: Length } = {};
+    for (const side of ["left", "right"] as const) {
+      const v = s.own.get(`margin-${side}`);
+      const l = v && v !== "auto" ? parseLength(v, ctx) : undefined;
+      if (l && l.value !== 0) out[side] = l;
+    }
+    return out.left || out.right ? out : undefined;
   }
 
   /** `position: relative` offsets: a visual shift that leaves layout untouched. */
@@ -310,9 +348,14 @@ export class Converter {
     this.#validate(ps, `${el.tagName}::${which}`);
     const content = ps.own.get("content");
     if (!content || ps.props.get("display") === "none") return;
-    const text = parseContent(content, el, (msg) => this.warnings.add(`${msg} (<${el.tagName}::${which}>)`));
-    if (!text) return;
-    const children = run.nested(() => run.text(text, ps.props));
+    const parts = parseContent(content, el, (msg) => this.warnings.add(`${msg} (<${el.tagName}::${which}>)`));
+    if (!parts.length) return;
+    const children = run.nested(() => {
+      for (const part of parts) {
+        if (typeof part === "string") run.text(part, ps.props);
+        else run.push({ kind: "page-counter", which: part.counter }, false);
+      }
+    });
     run.splice(this.#decorate(children, "", ps, style));
   }
 
@@ -382,6 +425,16 @@ export class Converter {
     }
     const offset = style.own.get("position") === "relative" ? this.#relativeOffset(style) : undefined;
     if (offset?.kind === "translate" && children.length) wrap({ kind: "move", dx: offset.dx, dy: offset.dy, children });
+
+    // Inline margins become horizontal space around the element.
+    const margins = this.#horizontalMargins(style);
+    if (margins && children.length) {
+      children = [
+        ...(margins.left ? [{ kind: "space" as const, width: margins.left }] : []),
+        ...children,
+        ...(margins.right ? [{ kind: "space" as const, width: margins.right }] : []),
+      ];
+    }
     return children;
   }
 
@@ -854,24 +907,50 @@ function transformText(value: string, transform: string | undefined): string {
 }
 
 /** Evaluates a CSS `content` value: strings (with escapes), attr(), quotes. */
-function parseContent(value: string, el: Element, warn: (message: string) => void): string {
+function parseContent(value: string, el: Element, warn: (message: string) => void): ContentPart[] {
   const v = value.trim();
-  if (v === "none" || v === "normal") return "";
-  let out = "";
-  const re = /"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|attr\(\s*([-\w]+)\s*\)|(open-quote|close-quote|no-open-quote|no-close-quote)|(\S+\([^)]*\)|\S+)/g;
+  if (v === "none" || v === "normal") return [];
+  const out: ContentPart[] = [];
+  const text = (t: string) => {
+    if (!t) return;
+    if (typeof out.at(-1) === "string") out[out.length - 1] += t;
+    else out.push(t);
+  };
+  const re = /"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|attr\(\s*([-\w]+)\s*\)|counter\(\s*(page|pages)\s*\)|(open-quote|close-quote|no-open-quote|no-close-quote)|(\S+\([^)]*\)|\S+)/g;
   for (const m of v.matchAll(re)) {
-    if (m[1] !== undefined || m[2] !== undefined) out += unescapeCss(m[1] ?? m[2]!);
-    else if (m[3]) out += attr(el, m[3]) ?? "";
-    else if (m[4] === "open-quote") out += "“";
-    else if (m[4] === "close-quote") out += "”";
-    else if (m[5]) warn(`Unsupported content value ignored: ${m[5]}`);
+    if (m[1] !== undefined || m[2] !== undefined) text(unescapeCss(m[1] ?? m[2]!));
+    else if (m[3]) text(attr(el, m[3]) ?? "");
+    else if (m[4]) out.push({ counter: m[4] as "page" | "pages" });
+    else if (m[5] === "open-quote") text("“");
+    else if (m[5] === "close-quote") text("”");
+    else if (m[6]) warn(`Unsupported content value ignored: ${m[6]}`);
   }
   return out;
 }
+
+/** Generated content: text, or a page counter (only meaningful when rendered in pages). */
+type ContentPart = string | { counter: "page" | "pages" };
 
 /** Resolves CSS string escapes such as `\2713 ` and `\"`. */
 function unescapeCss(s: string): string {
   return s.replace(/\\([0-9a-fA-F]{1,6})\s?|\\(.)/g, (_, hex: string | undefined, ch: string | undefined) =>
     hex ? String.fromCodePoint(parseInt(hex, 16)) : ch!,
   );
+}
+
+/**
+ * Gap between lines for a CSS `line-height`. Line boxes span the font's
+ * ascender to descender (about 1em), so the gap is the line height minus 1em;
+ * `normal` matches the document default (≈1.2).
+ */
+export function lineGap(value: string | undefined, s: ComputedStyle): Length | undefined {
+  const v = value?.trim();
+  if (!v || v === "normal") return { value: 0.2, unit: "em" };
+  if (/^\d*\.?\d+$/.test(v)) return { value: round(Number(v) - 1), unit: "em" };
+  const l = parseLength(v, lengthContext(s));
+  if (!l) return undefined;
+  if (l.unit === "%") return { value: round(l.value / 100 - 1), unit: "em" };
+  if (l.unit === "em") return { value: round(l.value - 1), unit: "em" };
+  const pt = l.unit === "pt" ? l.value : undefined;
+  return pt === undefined ? undefined : { value: round(pt - s.fontSize), unit: "pt" };
 }

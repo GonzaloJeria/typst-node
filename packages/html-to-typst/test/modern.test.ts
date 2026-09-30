@@ -10,11 +10,11 @@ const para = (html: string, css = ""): Inline[] => {
 
 describe("never fails silently", () => {
   it("warns about unknown properties and unsupported values", () => {
-    const { warnings } = doc('<div class="a">x</div>', ".a { mix-blend-mode: multiply; display: table-caption; margin-left: 12px; cursor: pointer; -webkit-font-smoothing: auto }");
+    const { warnings } = doc('<div class="a">x</div>', ".a { mix-blend-mode: multiply; display: table-caption; line-height: tall; cursor: pointer; -webkit-font-smoothing: auto }");
     expect(warnings).toEqual([
       "Unsupported CSS ignored: mix-blend-mode: multiply (<div>)",
       "Unsupported CSS value ignored: display: table-caption (<div>)",
-      "Unsupported CSS value ignored: margin-left: 12px (<div>)",
+      "Unsupported CSS value ignored: line-height: tall (<div>)",
     ]);
   });
 

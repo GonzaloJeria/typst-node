@@ -107,6 +107,8 @@ export type Inline =
   | { kind: "link"; href: string; children: Inline[] }
   | { kind: "styled"; style: TextStyle; children: Inline[] }
   | { kind: "box"; style: InlineBoxStyle; children: Inline[] }
+  /** Horizontal space, from inline margins. */
+  | { kind: "space"; width: Length }
   | { kind: "linebreak" }
   | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string }
   /** `position: relative` offset of inline content: painted shifted, laid out in place. */
@@ -129,7 +131,17 @@ export interface TableRow {
 }
 
 export type Block =
-  | { kind: "paragraph"; children: Inline[]; align?: HAlign; justify?: boolean }
+  | {
+      kind: "paragraph";
+      children: Inline[];
+      align?: HAlign;
+      justify?: boolean;
+      /** Gap between lines, when `line-height` differs from the document's. */
+      leading?: Length;
+    }
+  /** Horizontal margins (outside the box, like CSS). */
+  | { kind: "pad"; left?: Length; right?: Length; children: Block[] }
+  | PageRun
   | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[] }
   | {
       kind: "list";
@@ -188,16 +200,42 @@ export interface PageSetup {
   height?: Length;
   margin?: Sides<Length>;
   fill?: Paint;
-  header?: MarginBand;
-  footer?: MarginBand;
+  /** `null` removes an inherited header (e.g. a named page with `content: none`). */
+  header?: MarginBand | null;
+  footer?: MarginBand | null;
   /** Content repeated on every page above the body (`position: fixed`). */
   foreground?: Block[];
+  /** Overrides for the document's first page (`@page :first`). */
+  first?: FirstPage;
+}
+
+export interface FirstPage {
+  header?: MarginBand | null;
+  footer?: MarginBand | null;
+  fill?: Paint | null;
+}
+
+/**
+ * A run of pages with its own page setup: a CSS named page (`page: name`) or a
+ * composed section. Nested runs inherit whatever setup they do not override.
+ */
+export interface PageRun {
+  kind: "page-run";
+  /** CSS page name, resolved against `@page name` rules. */
+  name?: string;
+  page?: PageSetup;
+  text?: TextStyle;
+  leading?: Length;
+  lang?: string;
+  children: Block[];
 }
 
 export interface Document {
   page?: PageSetup;
   /** Document-wide text defaults (from `body`/`html`). */
   text?: TextStyle;
+  /** Document-wide gap between lines (from the body's `line-height`). */
+  leading?: Length;
   lang?: string;
   children: Block[];
 }

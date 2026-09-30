@@ -41,6 +41,42 @@ las IP privadas, de loopback y link-local, validando la IP exacta al conectar
 (protege también contra DNS rebinding). Las redirecciones se vuelven a validar
 en cada salto, y hay límites de tamaño y timeout.
 
+### Plantillas y secciones
+
+Para documentos con una base común (encabezado, pie, estilos) y partes con
+diseño distinto, `render` acepta secciones en vez de un HTML. Cada sección
+empieza en una página nueva, su CSS solo se aplica a ella y la numeración es
+continua en todo el documento:
+
+```ts
+const { pdf } = await renderer.render({
+  layout: {
+    css: "body { font-family: Inter }",
+    page: {
+      size: "A4",
+      margin: "25mm 18mm",
+      header: '<img src="logo.svg" style="width: 30mm">',
+      footer: "Página {{page}} de {{pages}}",
+    },
+  },
+  sections: [
+    { html: portada, css: portadaCss, page: { margin: "0", header: false, background: "#0f172a" } },
+    { html: terminos, css: "body { font-size: 8pt }" },
+  ],
+});
+```
+
+`page` acepta `size`, `margin`, `background`, `header` y `footer` (HTML, o
+`false` para quitarlo); lo que defina una sección reemplaza al del layout.
+
+Lo mismo se puede hacer en un solo HTML con CSS estándar de páginas con nombre:
+
+```css
+@page legal { margin: 15mm; @top-center { content: none } }
+@page :first { background: #0f172a; @top-center { content: none } }
+.terminos { page: legal }
+```
+
 ### Otros paquetes
 
 ```ts
@@ -87,11 +123,19 @@ difuminado aproximado (la caja con sombra no se parte entre páginas).
 `body`/`html`; encabezado y pie con las cajas de margen `@top-left|center|right`
 y `@bottom-left|center|right`, con `content` de texto, `counter(page)`,
 `counter(pages)` y `element(nombre)` para mover al margen HTML marcado con
-`position: running(nombre)` (por ejemplo, un logo).
+`position: running(nombre)` (por ejemplo, un logo). `counter(page)` y
+`counter(pages)` también funcionan en `::before`/`::after`. Páginas con nombre
+(`page: nombre` + `@page nombre { … }`, en elementos de primer nivel) con su
+propio tamaño, márgenes, fondo y cajas de margen; `@page :first` con fondo y
+cajas de margen distintas en la primera página.
 
-**Todavía no:** `float`, márgenes horizontales distintos de `auto`/0, `height`,
-`line-height`, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
-selectores `@page :first`/`:left`, imágenes de fondo.
+**Espaciado:** márgenes horizontales (`pad` en bloques, espacio en elementos
+inline, combinables con `auto`) y `line-height` (número, %, longitud;
+`normal` ≈ 1.2).
+
+**Todavía no:** `float`, `height`, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
+márgenes o tamaño distintos en `@page :first`, `@page :left/:right`,
+`@page nombre:first`, imágenes de fondo.
 
 Nada se descarta en silencio: cada propiedad o valor que no se sabe renderizar
 genera un warning, y con `strict: true` `htmlToTypst` lanza un `TranspileError`.

@@ -14,6 +14,7 @@ const version = spawnSync(binary, ["--version"]).status === 0
 
 const FIXTURES = path.join(path.dirname(new URL(import.meta.url).pathname), "fixtures");
 const fixtures = readdirSync(FIXTURES).filter((f) => f.endsWith(".html")).sort();
+const composed = readdirSync(FIXTURES).filter((f) => f.endsWith(".json")).sort();
 const read = (f: string) => readFileSync(path.join(FIXTURES, f), "utf8");
 
 // Low resolution keeps goldens small while still catching layout regressions.
@@ -35,6 +36,13 @@ describe.skipIf(!version)("visual regression", () => {
     const { pages, diagnostics } = await renderer.renderPages(read(file), { format: "png", ppi: PPI });
     expect(diagnostics).toEqual([]);
     const failures = matchGoldens(file.replace(/\.html$/, ""), pages);
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  it.each(composed)("%s (sections)", async (file) => {
+    const { pages, diagnostics } = await renderer.renderPages(JSON.parse(read(file)), { format: "png", ppi: PPI });
+    expect(diagnostics).toEqual([]);
+    const failures = matchGoldens(file.replace(/\.json$/, ""), pages);
     expect(failures, failures.join("\n")).toEqual([]);
   });
 });

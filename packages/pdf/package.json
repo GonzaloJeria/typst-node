@@ -28,7 +28,8 @@
   },
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "bench": "node bench.mjs"
   },
   "dependencies": {
     "html-to-typst": "workspace:^",

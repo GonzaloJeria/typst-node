@@ -16,11 +16,18 @@ export interface Stylesheet {
   page: Declaration[];
   /** `@page` margin boxes by name, e.g. `top-center` → declarations. */
   pageBoxes: Record<string, Declaration[]>;
+  /** `@page name`, `@page :first` and `@page name:first` rules, by selector. */
+  namedPages: Record<string, PageRule>;
   warnings: string[];
 }
 
+export interface PageRule {
+  page: Declaration[];
+  pageBoxes: Record<string, Declaration[]>;
+}
+
 export function emptyStylesheet(): Stylesheet {
-  return { rules: [], page: [], pageBoxes: {}, warnings: [] };
+  return { rules: [], page: [], pageBoxes: {}, namedPages: {}, warnings: [] };
 }
 
 export function parseDeclarations(text: string): Declaration[] {
@@ -57,9 +64,11 @@ export function parseStylesheet(css: string, into: Stylesheet = emptyStylesheet(
     if (prelude.startsWith("@")) {
       const at = prelude.toLowerCase();
       if (at.startsWith("@page")) {
-        const selector = prelude.slice(5).trim();
-        if (selector) into.warnings.push(`Unsupported @page selector ignored: @page ${selector}`);
-        else parsePageBody(body, into);
+        const selector = prelude.slice(5).trim().replace(/\s+/g, "");
+        if (!selector) parsePageBody(body, into);
+        else if (/^(-?[_a-zA-Z][-\w]*)?(:first)?$/i.test(selector)) {
+          parsePageBody(body, (into.namedPages[selector.toLowerCase()] ??= { page: [], pageBoxes: {} }));
+        } else into.warnings.push(`Unsupported @page selector ignored: @page ${selector}`);
       }
       else if (at.startsWith("@media") && /\bprint\b/.test(at) && !/\bnot\b/.test(at)) parseStylesheet(body, into);
       // Other at-rules (@font-face, @import, screen media, …) are ignored.
@@ -104,7 +113,7 @@ export function splitTopLevel(text: string, sep: string): string[] {
 }
 
 /** Splits an `@page` body into its declarations and nested margin boxes. */
-function parsePageBody(body: string, into: Stylesheet): void {
+function parsePageBody(body: string, into: PageRule): void {
   let rest = "";
   let i = 0;
   while (i < body.length) {

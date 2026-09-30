@@ -1,0 +1,22 @@
+{
+  "layout": {
+    "css": "body { font-family: sans-serif; font-size: 10pt; color: #1f2937 } .brand { color: #7c3aed; font-weight: bold }",
+    "page": {
+      "size": "A5",
+      "margin": "20mm 15mm",
+      "header": "<p style=\"font-size: 8pt; border-bottom: 1px solid #ddd6fe\"><span class=\"brand\">ACME</span> · Cotización 0042</p>",
+      "footer": "<p style=\"font-size: 8pt; color: #6b7280\">Página {{page}} de {{pages}}</p>"
+    }
+  },
+  "sections": [
+    {
+      "html": "<div class=\"hero\"><h1>Cotización</h1><p>Servicios de diseño y desarrollo</p></div><table><tr><th>Ítem</th><th>Total</th></tr><tr><td>Diseño</td><td>$1.200</td></tr><tr><td>Desarrollo</td><td>$3.400</td></tr></table>",
+      "css": ".hero { background: linear-gradient(90deg, #7c3aed, #db2777); color: white; padding: 12pt; border-radius: 8pt } .hero h1 { margin: 0 } table { width: 100%; border-collapse: collapse; margin-top: 12pt } th, td { border-bottom: 1px solid #e5e7eb; padding: 4pt; text-align: left } .hero p { color: #ede9fe; margin: 2pt 0 0 }"
+    },
+    {
+      "html": "<h2>Términos y condiciones</h2><p>Los precios tienen una validez de treinta días. El pago se realiza en dos cuotas: la mitad al inicio y la otra mitad contra entrega.</p><p>Cualquier cambio de alcance se cotiza por separado.</p>",
+      "css": "body { font-family: serif; font-size: 8pt } h2 { font-size: 11pt }",
+      "page": { "margin": "15mm", "header": false }
+    }
+  ]
+}
