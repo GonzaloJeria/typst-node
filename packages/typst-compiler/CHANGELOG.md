@@ -1,4 +1,4 @@
-# typst-compiler
+# @gjeria/typst-compiler
 
 ## 0.1.0
 

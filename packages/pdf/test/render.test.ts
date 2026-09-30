@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { AssetError, PdfRenderer } from "../src/index.js";
+import { AssetError, CliBackend, PdfRenderer, resolveSidecarBinary, SidecarBackend } from "../src/index.js";
 
 const hasTypst = spawnSync(process.env.TYPST_PATH ?? "typst", ["--version"]).status === 0;
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -49,5 +49,28 @@ describe.skipIf(!hasTypst)("PdfRenderer", () => {
     const borrowed = new PdfRenderer({ backend: renderer.backend });
     await borrowed.dispose();
     await expect(renderer.render("<p>still alive</p>")).resolves.toBeDefined();
+  });
+});
+
+describe("default backend", () => {
+  it("uses the installed typst-sidecar when there is one, else the CLI", async () => {
+    const r = new PdfRenderer();
+    try {
+      expect(r.backend).toBeInstanceOf(resolveSidecarBinary() ? SidecarBackend : CliBackend);
+    } finally {
+      await r.dispose();
+    }
+  });
+
+  it("uses the CLI when cli options are given", async () => {
+    const r = new PdfRenderer({ cli: { maxConcurrency: 1 } });
+    expect(r.backend).toBeInstanceOf(CliBackend);
+    await r.dispose();
+  });
+
+  it("uses the sidecar when sidecar options are given", async () => {
+    const r = new PdfRenderer({ sidecar: { processes: 1 } });
+    expect(r.backend).toBeInstanceOf(SidecarBackend);
+    await r.dispose();
   });
 });

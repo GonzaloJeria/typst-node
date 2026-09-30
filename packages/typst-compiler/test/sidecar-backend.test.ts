@@ -3,6 +3,7 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   CliBackend,
+  resolveSidecarBinary,
   SidecarBackend,
   TypstAbortError,
   TypstBinaryError,
@@ -11,8 +12,9 @@ import {
   TypstTimeoutError,
 } from "../src/index.js";
 
-// Integration tests against the sidecar built from crates/typst-sidecar; skipped when absent.
-const binary = process.env.TYPST_SIDECAR_PATH
+// Integration tests against the sidecar (`pnpm sidecar:build`, or a published
+// platform package); skipped when absent.
+const binary = resolveSidecarBinary()
   ?? path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../../crates/typst-sidecar/target/release/typst-sidecar");
 const hasSidecar = existsSync(binary);
 

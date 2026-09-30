@@ -1,5 +1,5 @@
 {
-  "name": "typst-compiler",
+  "name": "@gjeria/typst-compiler",
   "version": "0.1.0",
   "description": "Compile Typst to PDF, PNG or SVG from Node.js with the official Typst binary or long-lived typst-sidecar processes.",
   "keywords": [
@@ -61,5 +61,12 @@
         }
       }
     }
+  },
+  "optionalDependencies": {
+    "@gjeria/typst-sidecar-linux-x64": "workspace:*",
+    "@gjeria/typst-sidecar-linux-arm64": "workspace:*",
+    "@gjeria/typst-sidecar-darwin-x64": "workspace:*",
+    "@gjeria/typst-sidecar-darwin-arm64": "workspace:*",
+    "@gjeria/typst-sidecar-win32-x64": "workspace:*"
   }
 }

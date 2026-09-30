@@ -1,0 +1,37 @@
+{
+  "name": "@gjeria/typst-sidecar-win32-x64",
+  "version": "0.1.0",
+  "description": "typst-sidecar binary for win32-x64 (x86_64-pc-windows-msvc), used by @gjeria/typst-compiler.",
+  "author": "Gonzalo Jeria (https://github.com/GonzaloJeria)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GonzaloJeria/typst-node.git",
+    "directory": "npm/typst-sidecar-win32-x64"
+  },
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "bin": {
+    "typst-sidecar": "bin/typst-sidecar.exe"
+  },
+  "files": [
+    "bin",
+    "LICENSE",
+    "README.md"
+  ],
+  "preferUnplugged": true,
+  "scripts": {
+    "prepublishOnly": "node -e \"require('fs').accessSync('bin/typst-sidecar.exe')\""
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "typstSidecar": {
+    "target": "x86_64-pc-windows-msvc",
+    "binary": "bin/typst-sidecar.exe"
+  }
+}

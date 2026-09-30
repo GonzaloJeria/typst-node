@@ -26,6 +26,10 @@ use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World, WorldExt};
 use typst_kit::fonts::{self as kit_fonts, FontStore};
 
+#[cfg(target_env = "musl")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Request {

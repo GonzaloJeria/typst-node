@@ -5,3 +5,4 @@ coverage/
 .DS_Store
 packages/pdf/test/visual/__diff__/
 crates/*/target/
+npm/*/bin/

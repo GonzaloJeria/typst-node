@@ -24,6 +24,16 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.4)
 
+  npm/typst-sidecar-darwin-arm64: {}
+
+  npm/typst-sidecar-darwin-x64: {}
+
+  npm/typst-sidecar-linux-arm64: {}
+
+  npm/typst-sidecar-linux-x64: {}
+
+  npm/typst-sidecar-win32-x64: {}
+
   packages/html-to-typst:
     dependencies:
       parse5:
@@ -32,10 +42,10 @@ importers:
 
   packages/pdf:
     dependencies:
-      html-to-typst:
+      '@gjeria/html-to-typst':
         specifier: workspace:^
         version: link:../html-to-typst
-      typst-compiler:
+      '@gjeria/typst-compiler':
         specifier: workspace:^
         version: link:../typst-compiler
     devDependencies:
@@ -43,7 +53,23 @@ importers:
         specifier: ^8.0.1
         version: 8.0.1
 
-  packages/typst-compiler: {}
+  packages/typst-compiler:
+    optionalDependencies:
+      '@gjeria/typst-sidecar-darwin-arm64':
+        specifier: workspace:*
+        version: link:../../npm/typst-sidecar-darwin-arm64
+      '@gjeria/typst-sidecar-darwin-x64':
+        specifier: workspace:*
+        version: link:../../npm/typst-sidecar-darwin-x64
+      '@gjeria/typst-sidecar-linux-arm64':
+        specifier: workspace:*
+        version: link:../../npm/typst-sidecar-linux-arm64
+      '@gjeria/typst-sidecar-linux-x64':
+        specifier: workspace:*
+        version: link:../../npm/typst-sidecar-linux-x64
+      '@gjeria/typst-sidecar-win32-x64':
+        specifier: workspace:*
+        version: link:../../npm/typst-sidecar-win32-x64
 
 packages:
 

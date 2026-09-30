@@ -9,6 +9,7 @@ import {
   TypstDisposedError,
   TypstTimeoutError,
 } from "./errors.js";
+import { resolveSidecarBinary } from "./sidecar-binary.js";
 import type {
   CompileRequest,
   CompileResult,
@@ -20,7 +21,10 @@ import type {
 } from "./types.js";
 
 export interface SidecarBackendOptions {
-  /** Path to the `typst-sidecar` binary. Default: `$TYPST_SIDECAR_PATH` or `typst-sidecar` on PATH. */
+  /**
+   * Path to the `typst-sidecar` binary. Default: `$TYPST_SIDECAR_PATH`, the
+   * prebuilt binary installed with this package, or `typst-sidecar` on PATH.
+   */
   binaryPath?: string;
   /** Sidecar processes kept running; each compiles one document at a time. Default: `availableParallelism()`. */
   processes?: number;
@@ -76,7 +80,7 @@ export class SidecarBackend implements TypstBackend {
 
   constructor(options: SidecarBackendOptions = {}) {
     this.#opts = options;
-    this.#binary = options.binaryPath ?? process.env.TYPST_SIDECAR_PATH ?? "typst-sidecar";
+    this.#binary = options.binaryPath ?? resolveSidecarBinary() ?? "typst-sidecar";
     this.#size = Math.max(1, options.processes ?? availableParallelism());
   }
 
@@ -314,6 +318,6 @@ function warningsOf(res: SidecarResponse): Diagnostic[] {
 
 function notFound(binary: string, err: Error): string {
   return (err as NodeJS.ErrnoException).code === "ENOENT"
-    ? `typst-sidecar binary not found at "${binary}". Build it (cargo build --release in crates/typst-sidecar) or set TYPST_SIDECAR_PATH.`
+    ? `typst-sidecar binary not found at "${binary}". No prebuilt binary for ${process.platform}-${process.arch} was installed (were optional dependencies skipped?); set TYPST_SIDECAR_PATH or use CliBackend.`
     : `Failed to run typst-sidecar: ${err.message}`;
 }

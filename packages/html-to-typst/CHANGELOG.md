@@ -1,4 +1,4 @@
-# html-to-typst
+# @gjeria/html-to-typst
 
 ## 0.1.0
 
