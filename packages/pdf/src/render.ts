@@ -10,7 +10,16 @@ import {
   type PageFormat,
   type TypstBackend,
 } from "@gjeria/typst-compiler";
+import { fileURLToPath } from "node:url";
 import { resolveAssets, type AssetOptions } from "./assets.js";
+
+/**
+ * Directory with the fonts shipped in this package (Inter, SIL OFL), which
+ * CSS `sans-serif` and `system-ui` resolve to. Renderers that create their
+ * own backend add it automatically; add `{ dir: bundledFontsDir }` to the
+ * fonts of a backend you create yourself.
+ */
+export const bundledFontsDir = fileURLToPath(new URL("../fonts", import.meta.url));
 
 export interface RenderOptions extends TranspileOptions {
   assets?: AssetOptions;
@@ -56,6 +65,8 @@ export interface PdfRendererOptions {
   sidecar?: SidecarBackendOptions | true;
   /** Defaults merged into every render call. */
   defaults?: RenderOptions;
+  /** Add the bundled fonts to the backend the renderer creates. Default: true. */
+  bundledFonts?: boolean;
 }
 
 /** Long-lived renderer: owns (or borrows) a backend and applies default options. */
@@ -117,10 +128,12 @@ export class PdfRenderer {
 }
 
 function defaultBackend(options: PdfRendererOptions): TypstBackend {
-  if (options.cli && !options.sidecar) return new CliBackend(options.cli);
+  const withFonts = <T extends { fonts?: readonly FontSource[] }>(o: T): T =>
+    options.bundledFonts === false ? o : { ...o, fonts: [...(o.fonts ?? []), { dir: bundledFontsDir }] };
+  if (options.cli && !options.sidecar) return new CliBackend(withFonts(options.cli));
   const sidecar = options.sidecar === true ? {} : options.sidecar ?? {};
-  if (options.sidecar || sidecar.binaryPath || resolveSidecarBinary()) return new SidecarBackend(sidecar);
-  return new CliBackend();
+  if (options.sidecar || sidecar.binaryPath || resolveSidecarBinary()) return new SidecarBackend(withFonts(sidecar));
+  return new CliBackend(withFonts({}));
 }
 
 async function prepare(input: RenderInput, opts: RenderOptions): Promise<Prepared> {

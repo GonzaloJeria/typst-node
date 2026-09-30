@@ -23,6 +23,7 @@
   "sideEffects": false,
   "files": [
     "dist",
+    "fonts",
     "README.md",
     "LICENSE"
   ],

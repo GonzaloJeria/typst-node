@@ -72,6 +72,14 @@ Images: data URIs, files inside `assets.baseDir`, and (opt-in) HTTP(S) with SSRF
 protection (private IPs blocked at connect time, host allowlist, size and time
 limits).
 
+## Fonts
+
+CSS `sans-serif` and `system-ui` resolve to **Inter** (SIL OFL), shipped in this
+package; `serif` and `monospace` use Libertinus Serif and DejaVu Sans Mono from
+Typst. Renderers add the bundled fonts to the backend they create; for your own
+backend, add `{ dir: bundledFontsDir }` to its fonts, or pass
+`bundledFonts: false` to opt out.
+
 ## License
 
 MIT © Gonzalo Jeria

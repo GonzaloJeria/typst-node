@@ -28,7 +28,7 @@ use typst_kit::fonts::{self as kit_fonts, FontStore};
 
 #[cfg(target_env = "musl")]
 #[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

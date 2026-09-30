@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { AssetError, CliBackend, PdfRenderer, resolveSidecarBinary, SidecarBackend } from "../src/index.js";
+import { AssetError, bundledFontsDir, CliBackend, PdfRenderer, resolveSidecarBinary, SidecarBackend } from "../src/index.js";
 
 const hasTypst = spawnSync(process.env.TYPST_PATH ?? "typst", ["--version"]).status === 0;
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -49,6 +49,18 @@ describe.skipIf(!hasTypst)("PdfRenderer", () => {
     const borrowed = new PdfRenderer({ backend: renderer.backend });
     await borrowed.dispose();
     await expect(renderer.render("<p>still alive</p>")).resolves.toBeDefined();
+  });
+
+  it("renders sans-serif with the bundled Inter font", async () => {
+    const { source, diagnostics } = await renderer.render('<p style="font-family: sans-serif">Hola</p>');
+    expect(source).toContain('"Inter"');
+    expect(diagnostics).toEqual([]);
+  });
+});
+
+describe("bundled fonts", () => {
+  it("ships Inter in bundledFontsDir", () => {
+    expect(readdirSync(bundledFontsDir)).toEqual(expect.arrayContaining(["Inter-Regular.ttf", "Inter-Bold.ttf", "OFL.txt"]));
   });
 });
 
