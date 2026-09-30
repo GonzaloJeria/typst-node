@@ -174,6 +174,21 @@ const { pdf, warnings } = await renderer.render({
 process.on("SIGTERM", () => renderer.dispose());
 ```
 
+## Publicar en npm
+
+Las versiones y los CHANGELOG salen de `.changeset/` (`pnpm changeset` para
+registrar un cambio, `pnpm changeset version` para aplicar los pendientes).
+
+```sh
+npm login                 # cuenta de npm con 2FA
+pnpm install && pnpm test
+pnpm release              # build + changeset publish (publica solo versiones nuevas)
+git push --follow-tags    # tags html-to-typst@x.y.z, typst-compiler@x.y.z, typst-html-pdf@x.y.z
+```
+
+El binario `typst-sidecar` se publica aparte: `git tag sidecar-v0.1.0 && git push --tags`
+dispara el workflow que adjunta los binarios al release de GitHub.
+
 ## Soporte de HTML/CSS
 
 **Soportado:** cascada con especificidad, `!important`, herencia y variables CSS

@@ -1,11 +1,30 @@
 {
   "name": "typst-html-pdf",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "HTML/CSS to PDF in Node.js without Chromium, powered by Typst.",
+  "keywords": [
+    "pdf",
+    "html-to-pdf",
+    "typst",
+    "puppeteer-alternative",
+    "invoice",
+    "report"
+  ],
+  "author": "Gonzalo Jeria (https://github.com/GonzaloJeria)",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GonzaloJeria/typst-node.git",
+    "directory": "packages/pdf"
+  },
+  "homepage": "https://github.com/GonzaloJeria/typst-node/tree/main/packages/pdf#readme",
+  "bugs": "https://github.com/GonzaloJeria/typst-node/issues",
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -24,7 +43,7 @@
     }
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19"
   },
   "scripts": {
     "build": "tsup",
@@ -37,5 +56,20 @@
   },
   "devDependencies": {
     "parse5": "^8.0.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.cjs"
+        }
+      }
+    }
   }
 }
