@@ -9,6 +9,7 @@ export {
   type RenderInput,
   type RenderOptions,
 } from "./render.js";
+export { bundledFontsDir } from "./render.js";
 export { AssetError, resolveAssets, sniffImage, type AssetOptions, type ResolvedAssets } from "./assets.js";
 export { isPrivateAddress } from "./net.js";
 export type { ComposeInput, Layout, PageOptions, Section, TranspileOptions } from "@gjeria/html-to-typst";

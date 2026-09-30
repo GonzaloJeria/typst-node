@@ -170,6 +170,50 @@ const { pdf, warnings } = await renderer.render({
 process.on("SIGTERM", () => renderer.dispose());
 ```
 
+### Fuentes incluidas
+
+`sans-serif` y `system-ui` usan **Inter** (Regular, Italic, Bold, Bold Italic;
+SIL OFL), incluida en `@gjeria/typst-html-pdf` (1,4 MB). `serif` usa Libertinus
+Serif y `monospace` DejaVu Sans Mono, que vienen dentro de Typst. Un
+`font-family: Arial, sans-serif` cae en Inter si Arial no está instalada. El
+renderer agrega las fuentes solo; si creas tu propio backend, pásale
+`fonts: [{ dir: bundledFontsDir }]`, y con `bundledFonts: false` las desactivas.
+
+### Memoria y costo (Cloud Run)
+
+Medido en Linux x64 con el binario publicado (musl estático + jemalloc),
+compilando 300 documentos de la suite sin reiniciar:
+
+| Proceso | Arranque | Estable | Qué lo ocupa |
+|---|---|---|---|
+| `typst-sidecar` | 15 MB | ~63 MB | fuentes, biblioteca estándar de Typst, caché de layout (se poda cada documento) |
+| Node + librería | 65 MB | ~105 MB | V8 (42 MB vacío), parse5 y el transpilador (~15 MB) |
+| Node con `--max-old-space-size=64 --max-semi-space-size=1` | 65 MB | ~78 MB | mismo trabajo, el GC libera antes |
+
+Total: **~140 MB** por instancia con un proceso sidecar. Cada proceso extra de
+`sidecar.processes` suma ~60 MB; su valor por defecto es el número de CPUs, que
+en Cloud Run con 1 vCPU es 1. El reciclado (`maxCompilationsPerProcess`, 500 por
+defecto) evita que la memoria del sidecar crezca con el tiempo.
+
+Configuración más barata recomendada:
+
+```bash
+gcloud run deploy pdf --source . \
+  --cpu 1 --memory 256Mi --concurrency 8 \
+  --min-instances 0 --max-instances 10 \
+  --execution-environment gen1 --cpu-boost \
+  --set-env-vars NODE_OPTIONS="--max-old-space-size=64 --max-semi-space-size=1"
+```
+
+- En Cloud Run la memoria pesa poco en la factura: 1 vCPU cuesta ~10 veces más
+  por segundo que 1 GiB. Bajar de 512 MiB a 256 MiB ahorra ~2,5 %; lo que manda es
+  el tiempo de CPU por documento (~5–10 ms aquí).
+- `gen1` permite 256 MiB (gen2 exige 512 MiB mínimo) y arranca más rápido.
+- Con menos de 1 vCPU Cloud Run fuerza `concurrency 1`; con 1 vCPU un solo
+  sidecar atiende en cola a varias solicitudes concurrentes sin memoria extra.
+- Si mandas imágenes grandes o generas PNG, deja 512 MiB: la rasterización
+  llega a ~75 MB de pico en el sidecar.
+
 ## Publicar en npm
 
 Las versiones y los CHANGELOG salen de `.changeset/` (`pnpm changeset` para

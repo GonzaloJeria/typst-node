@@ -15,6 +15,9 @@ const DEFAULT_GENERICS: NonNullable<ConvertOptions["genericFamilies"]> = {
   // Fonts embedded in the official Typst binary.
   serif: ["Libertinus Serif"],
   monospace: ["DejaVu Sans Mono"],
+  // Bundled with @gjeria/typst-html-pdf (see `bundledFontsDir`).
+  "sans-serif": ["Inter"],
+  "system-ui": ["Inter"],
 };
 
 const SKIP = new Set(["head", "script", "style", "template", "noscript", "title", "meta", "link", "iframe", "object", "embed", "video", "audio", "canvas", "form", "input", "button", "select", "textarea", "svg", "math"]);
