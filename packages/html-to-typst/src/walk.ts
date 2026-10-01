@@ -60,6 +60,9 @@ function mapBlocks(blocks: Block[], fn: (src: string) => string | null): Block[]
       case "grid":
         b.cells = b.cells.map((cell) => mapBlocks(cell, fn));
         return [b];
+      case "flow":
+        for (const item of b.items) item.children = mapBlocks(item.children, fn);
+        return [b];
       case "table":
         for (const rows of [b.header, b.body, b.footer]) {
           for (const row of rows ?? []) for (const cell of row.cells) cell.children = mapBlocks(cell.children, fn);
@@ -104,6 +107,7 @@ export function documentText(doc: Document): string {
         case "list": b.items.forEach(blk); break;
         case "box": case "styled-block": case "place": case "transform": case "pad": case "columns": blk(b.children); break;
         case "grid": b.cells.forEach(blk); break;
+        case "flow": for (const item of b.items) blk(item.children); break;
         case "page-run":
           bandBlocks(b.page?.header);
           blk(b.children);

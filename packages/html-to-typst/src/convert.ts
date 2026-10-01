@@ -1,10 +1,10 @@
 import { Cascade, type ComputedStyle, type PseudoElement } from "./css/cascade.js";
 import { serializeOuter } from "parse5";
 import { checkDeclaration } from "./css/support.js";
-import { parseColor, parseGradient, parseLength, parseShadows, parseTransform, parseUrl, splitValue, withAlpha, type LengthContext } from "./css/values.js";
-import { attr, isElement, isText, type Element, type Node } from "./dom.js";
+import { overColor, parseColor, parseGradient, parseInsetFill, parseLength, parseShadows, parseTransform, parseUrl, splitValue, toPt, withAlpha, type LengthContext } from "./css/values.js";
+import { attr, isElement, isText, type Element, type Node, type TextNode } from "./dom.js";
 import type {
-  BackgroundImage, Block, BoxStyle, Color, HAlign, Inline, InlineBoxStyle, Length, Paint, Sides, Size, Stroke, TableCell, TableRow, TextStyle, TransformOp, VAlign,
+  BackgroundImage, Block, BoxStyle, Color, HAlign, Inline, InlineBoxStyle, Length, LineHeight, Margins, Paint, Sides, Size, Stroke, TableCell, TableRow, TextStyle, TransformOp, VAlign,
 } from "./ir.js";
 
 export interface ConvertOptions {
@@ -119,8 +119,8 @@ export class Converter {
     const p: Extract<Block, { kind: "paragraph" }> = { kind: "paragraph", children };
     const lh = style.props.get("line-height");
     if (lh !== this.baseLineHeight) {
-      const leading = lineGap(lh, style);
-      if (leading) p.leading = leading;
+      const height = lineHeightOf(lh, style);
+      if (height !== undefined) p.lineHeight = height;
     }
     const ta = style.props.get("text-align");
     if (ta === "justify") p.justify = true;
@@ -133,11 +133,15 @@ export class Converter {
 
   /** Set while converting a flex item that shrinks to its content (an `auto` track). */
   #shrinkItem = false;
+  /** Set while converting a flex item whose width became its grid column. */
+  #trackItem = false;
 
   #block(el: Element, style: ComputedStyle, parent: ComputedStyle): Block[] {
     const tag = el.tagName;
     const shrink = this.#shrinkItem;
+    const track = this.#trackItem;
     this.#shrinkItem = false;
+    this.#trackItem = false;
     let content: Block[];
     const display = style.props.get("display");
 
@@ -147,8 +151,15 @@ export class Converter {
       const heading: Extract<Block, { kind: "heading" }> = { kind: "heading", level: HEADINGS[tag]!, children: run.finish() };
       const a = hAlign(style.props.get("text-align"));
       if (a && a !== "start" && a !== "left") heading.align = a;
+      const textStyle = this.#textDiff(style, parent);
+      if (textStyle) heading.style = textStyle;
+      const lh = style.props.get("line-height");
+      if (lh !== this.baseLineHeight) {
+        const height = lineHeightOf(lh, style);
+        if (height !== undefined) heading.lineHeight = height;
+      }
       content = [heading];
-    } else if (tag === "ul" || tag === "ol") {
+    } else if ((tag === "ul" || tag === "ol") && display !== "flex" && display !== "grid") {
       content = [this.#list(el, style)];
     } else if (tag === "table") {
       content = [this.#table(el, style)];
@@ -176,9 +187,10 @@ export class Converter {
 
     const position = style.own.get("position") ?? "static";
     const positioned = position === "relative" || position === "absolute" || position === "fixed";
-    content = this.#applyBox(el, style, content, positioned, shrink);
+    content = this.#applyBox(el, style, content, positioned, shrink, track);
 
-    const textDiff = this.#textDiff(style, parent);
+    // Headings carry their text style themselves.
+    const textDiff = tag in HEADINGS ? undefined : this.#textDiff(style, parent);
     if (textDiff) content = [{ kind: "styled-block", style: textDiff, children: content }];
 
     const ops = parseTransform(style.own.get("transform") ?? "none", lengthContext(style)) ?? [];
@@ -187,7 +199,11 @@ export class Converter {
     if (ops.length) content = [{ kind: "transform", ops, children: content }];
 
     const margins = this.#horizontalMargins(style);
-    if (margins && !/^(absolute|fixed)$/.test(position)) content = [{ kind: "pad", ...margins, children: content }];
+    if (margins && !/^(absolute|fixed)$/.test(position)) {
+      // Vertical margins move out of the pad, which would otherwise hide them.
+      const vertical = hoistMargins(content);
+      content = [{ kind: "pad", ...margins, children: content, ...(vertical ? { margins: vertical } : {}) }];
+    }
 
     const running = /^running\(\s*([-\w]+)\s*\)$/.exec(position);
     if (running) {
@@ -252,13 +268,14 @@ export class Converter {
     return placed;
   }
 
-  #applyBox(el: Element, s: ComputedStyle, content: Block[], positioned = false, shrink = false): Block[] {
+  #applyBox(el: Element, s: ComputedStyle, content: Block[], positioned = false, shrink = false, track = false): Block[] {
     const ctx = lengthContext(s);
     const box: BoxStyle = {};
     const p = s.props;
 
     // A table's width is expressed through its column sizes instead.
-    const width = el.tagName === "table" ? undefined : p.get("width") ?? p.get("max-width");
+    // A flex item's width already sized its grid column.
+    const width = el.tagName === "table" || track ? undefined : p.get("width") ?? p.get("max-width");
     if (width && width !== "auto" && width !== "none") {
       const w = parseLength(width, ctx);
       if (w) box.width = w;
@@ -270,7 +287,9 @@ export class Converter {
       const l = v && v !== "auto" ? positive(parseLength(v, ctx)) : undefined;
       if (l) box[key] = l;
     }
-    if ((box.height || box.minHeight) && p.get("box-sizing") === "border-box") box.borderBox = true;
+    if (p.get("box-sizing") === "border-box" && (box.height || box.minHeight || box.width)) box.borderBox = true;
+    // CSS widths exclude padding (content-box); Typst's include it.
+    if (box.width && !box.borderBox && (inset?.left || inset?.right)) box.contentWidth = true;
     const opacity = opacityOf(s);
     const image = backgroundImage(p, ctx);
     if (image) box.image = image;
@@ -285,13 +304,21 @@ export class Converter {
     const below = parseLength(p.get("margin-bottom") ?? "", ctx);
     if (below && below.unit !== "%") box.below = below;
     if (p.get("break-inside") === "avoid" || p.get("break-inside") === "avoid-page") box.breakable = false;
-    if (p.get("margin-left") === "auto") box.align = p.get("margin-right") === "auto" ? "center" : "right";
-    const shadows = parseShadows(s.own.get("box-shadow") ?? "none", ctx);
+    // Auto margins only move a block narrower than its container.
+    const full = box.width && typeof box.width === "object" && box.width.unit === "%" && box.width.value >= 100;
+    if (p.get("margin-left") === "auto" && box.width && !full) box.align = p.get("margin-right") === "auto" ? "center" : "right";
+    const shadows = parseInsetFill(s.own.get("box-shadow") ?? "") ? undefined : parseShadows(s.own.get("box-shadow") ?? "none", ctx);
     if (shadows?.length) box.shadows = shadows;
 
     // A positioned element is the containing block of its absolute children,
     // so it needs a block of its own even without visible styles.
     if (Object.keys(box).length === 0) return positioned ? [{ kind: "box", style: box, children: content }] : content;
+    // Margins alone ride on the block itself instead of a wrapping box.
+    const only = content.length === 1 ? content[0]! : undefined;
+    if (!positioned && only && Object.keys(box).every((k) => k === "above" || k === "below") && MARGIN_KINDS.has(only.kind)) {
+      (only as { margins?: Margins }).margins = { ...(box.above ? { above: box.above } : {}), ...(box.below ? { below: box.below } : {}) };
+      return content;
+    }
     // CSS blocks stretch to the container; make that visible when the box is.
     // Absolutely positioned boxes shrink to fit instead,
     // unless `left` and `right` together give them a width.
@@ -332,7 +359,10 @@ export class Converter {
   #grid(el: Element, style: ComputedStyle, display: "flex" | "grid"): Block[] {
     const ctx = lengthContext(style);
     const cells: Block[][] = [];
-    const all = el.childNodes.filter(isElement).filter((c) => !this.#skip(c));
+    // Text directly inside a flex or grid container becomes an anonymous item.
+    const all = el.childNodes.flatMap((n): Element[] =>
+      isElement(n) ? (this.#skip(n) ? [] : [n]) : isText(n) && n.value.trim() ? [anonymousItem(n, el)] : [],
+    );
     const allStyles = all.map((c) => this.style(c, style));
     const visible = all.map((_, i) => i).filter((i) => allStyles[i]!.props.get("display") !== "none");
     const children = visible.map((i) => all[i]!);
@@ -341,10 +371,7 @@ export class Converter {
     let columns: Size[] | undefined;
     if (display === "flex") {
       const dir = style.props.get("flex-direction") ?? "row";
-      if (dir.startsWith("column")) {
-        this.#flexAlignmentUnsupported(style, "flex-direction: column");
-        return this.blocks(el, style);
-      }
+      if (dir.startsWith("column")) return this.#columnFlex(children, childStyles, style, dir.endsWith("reverse"));
       columns = childStyles.map((cs) => {
         const grow = Number(splitValue(cs.props.get("flex") ?? cs.props.get("flex-grow") ?? "0")[0]);
         if (grow > 0) return { value: grow, unit: "fr" as const };
@@ -362,17 +389,91 @@ export class Converter {
     children.forEach((c, i) => {
       // Flex items without flex-grow or a width shrink to their content.
       this.#shrinkItem = display === "flex" && columns![i] === "auto";
+      this.#trackItem = display === "flex" && typeof columns![i] === "object" && (columns![i] as Length).unit !== "fr";
       cells.push(this.#block(c, childStyles[i]!, style));
     });
     if (display === "flex") columns = columns.slice(0, cells.length);
-    const gap = parseLength(splitValue(style.props.get("column-gap") ?? style.props.get("gap") ?? "")[0] ?? "", ctx);
+    const gaps = splitValue(style.props.get("gap") ?? "");
+    const gap = parseLength(style.props.get("column-gap") ?? gaps[1] ?? gaps[0] ?? "", ctx);
+    const rowGap = parseLength(style.props.get("row-gap") ?? gaps[0] ?? "", ctx);
+    if (display === "flex" && /^wrap/.test(style.props.get("flex-wrap") ?? "") && cells.length > 1) {
+      return this.#wrapFlex(columns, cells, style, gap, rowGap);
+    }
     const grid: Extract<Block, { kind: "grid" }> = { kind: "grid", columns: columns.length ? columns : ["auto"], cells, ...(gap ? { gutter: gap } : {}) };
-    if (display === "flex") {
-      const valign = FLEX_ALIGN[style.props.get("align-items") ?? ""];
-      if (valign) grid.valign = valign;
-      justifyFlex(grid, style.props.get("justify-content") ?? "", gap);
+    if (display === "flex") this.#alignFlex(grid, style, gap);
+    if (display === "grid" && rowGap && gap && JSON.stringify(rowGap) !== JSON.stringify(gap)) {
+      grid.columnGutters = Array(Math.max(0, grid.columns.length - 1)).fill(gap);
+      grid.gutter = rowGap;
     }
     return [grid];
+  }
+
+  /**
+   * A flex column: one grid column, `gap` between items, and `align-items`
+   * as the cells' horizontal alignment (items then shrink to their content).
+   */
+  #columnFlex(children: Element[], styles: ComputedStyle[], style: ComputedStyle, reverse: boolean): Block[] {
+    const justify = style.own.get("justify-content");
+    if (justify && !/^(normal|stretch|flex-start|start)$/.test(justify)) {
+      this.warnings.add(`Unsupported CSS ignored: justify-content: ${justify} with flex-direction: column`);
+    }
+    const ai = style.props.get("align-items") ?? "";
+    const halign: HAlign | undefined = /^(center)$/.test(ai) ? "center" : /^(flex-end|end|self-end|right)$/.test(ai) ? "right" : undefined;
+    const cells = children.map((c, i) => {
+      this.#shrinkItem = halign !== undefined;
+      return this.#block(c, styles[i]!, style);
+    });
+    if (reverse) cells.reverse();
+    const ctx = lengthContext(style);
+    const gaps = splitValue(style.props.get("gap") ?? "");
+    const rowGap = parseLength(style.props.get("row-gap") ?? gaps[0] ?? "", ctx);
+    const grid: Extract<Block, { kind: "grid" }> = { kind: "grid", columns: [{ value: 1, unit: "fr" }], cells, ...(rowGap ? { gutter: rowGap } : {}) };
+    if (halign) grid.halign = halign;
+    return [grid];
+  }
+
+  #alignFlex(grid: Extract<Block, { kind: "grid" }>, style: ComputedStyle, gap: Length | undefined): void {
+    const valign = FLEX_ALIGN[style.props.get("align-items") ?? ""];
+    if (valign) grid.valign = valign;
+    justifyFlex(grid, style.props.get("justify-content") ?? "", gap);
+  }
+
+  /**
+   * `flex-wrap: wrap`. Items sized in % (a Bootstrap `.row` of `.col-*`) are
+   * broken into lines that add up to at most 100%, one grid per line; other
+   * items flow like inline blocks, which Typst wraps on its own.
+   */
+  #wrapFlex(columns: Size[], cells: Block[][], style: ComputedStyle, gap: Length | undefined, rowGap: Length | undefined): Block[] {
+    const percent = columns.every((c) => typeof c === "object" && c.unit === "%" && !c.offset);
+    if (percent) {
+      const lines: number[][] = [];
+      let used = Infinity;
+      columns.forEach((c, i) => {
+        const w = (c as Length).value;
+        if (used + w > 100.01) lines.push([]), (used = 0);
+        lines.at(-1)!.push(i);
+        used += w;
+      });
+      return lines.map((line, i) => {
+        const grid: Extract<Block, { kind: "grid" }> = { kind: "grid", columns: line.map((j) => columns[j]!), cells: line.map((j) => cells[j]!), ...(gap ? { gutter: gap } : {}) };
+        this.#alignFlex(grid, style, gap);
+        if (rowGap && i < lines.length - 1) grid.margins = { below: rowGap };
+        return grid;
+      });
+    }
+    const flow: Extract<Block, { kind: "flow" }> = {
+      kind: "flow",
+      items: cells.map((children, i) => {
+        const c = columns[i];
+        return typeof c === "object" && c.unit !== "fr" ? { width: c, children } : { children };
+      }),
+    };
+    if (gap) flow.gap = gap;
+    if (rowGap) flow.rowGap = rowGap;
+    const justify = style.props.get("justify-content") ?? "";
+    const a = /^(?:center)$/.test(justify) ? "center" : /^(?:flex-end|end|right)$/.test(justify) ? "right" : undefined;
+    if (a) flow.align = a;
+    return [flow];
   }
 
   /** `justify-content`/`align-items` are only converted for flex rows. */
@@ -570,8 +671,16 @@ export class Converter {
     const borders: { cell: TableCell; sides: Sides<Stroke> | undefined }[] = [];
     const convertSection = (rows: Element[]): TableRow[] => {
       const grid = new OccupancyGrid();
+      const sectionStyles = new Map<Node, ComputedStyle>();
       const out: TableRow[] = rows.map((tr, r) => {
-        const trStyle = this.style(tr, style);
+        // Rows inherit from their <thead>/<tbody>/<tfoot>, which may set variables or colors.
+        const section = tr.parentNode;
+        let parentStyle = style;
+        if (section && isElement(section) && section !== el) {
+          parentStyle = sectionStyles.get(section) ?? this.style(section, style);
+          sectionStyles.set(section, parentStyle);
+        }
+        const trStyle = this.style(tr, parentStyle);
         const cells: TableCell[] = [];
         for (const td of cellsOf(tr)) {
           const cs = this.style(td, trStyle);
@@ -580,7 +689,7 @@ export class Converter {
           let rowspan = clampSpan(attr(td, "rowspan"), 65534);
           if (attr(td, "rowspan") === "0" || rowspan > rows.length - r) rowspan = rows.length - r;
           grid.place(r, colspan, rowspan);
-          const cell = this.#cell(td, cs, trStyle, colspan, rowspan);
+          const cell = this.#cell(td, cs, trStyle, style, colspan, rowspan);
           borders.push({ cell, sides: sides((side) => borderStroke(cs.props, side, lengthContext(cs))) });
           cells.push(cell);
         }
@@ -628,24 +737,32 @@ export class Converter {
       for (const b of borders) if (b.sides) b.cell.stroke = b.sides;
     }
 
-    const pad = firstCell && parseLength(firstCell.style.props.get("padding-top") ?? "", lengthContext(firstCell.style));
+    const cellCtx = firstCell && lengthContext(firstCell.style);
+    const pad = firstCell && sides((side) => {
+      const l = parseLength(firstCell!.style.props.get(`padding-${side}`) ?? "", cellCtx!);
+      return l && l.unit !== "%" ? l : undefined;
+    });
     const cellpadding = attr(el, "cellpadding");
-    block.inset = pad ?? (cellpadding ? parseLength(`${cellpadding}px`, ctx) : undefined) ?? { value: 0.75, unit: "pt" };
+    const samePad = pad && (["right", "bottom", "left"] as const).every((k) => JSON.stringify(pad[k]) === JSON.stringify(pad.top));
+    block.inset = (samePad ? pad!.top : pad) ?? (cellpadding ? parseLength(`${cellpadding}px`, ctx) : undefined) ?? { value: 0.75, unit: "pt" };
     return block;
   }
 
-  #cell(td: Element, style: ComputedStyle, rowStyle: ComputedStyle, colspan: number, rowspan: number): TableCell {
+  #cell(td: Element, style: ComputedStyle, rowStyle: ComputedStyle, tableStyle: ComputedStyle, colspan: number, rowspan: number): TableCell {
     let children = this.blocks(td, style);
-    const diff = this.#textDiff(style, rowStyle);
+    // Rows and sections emit no text style of their own: diff against the table.
+    const diff = this.#textDiff(style, tableStyle);
     const isTh = td.tagName === "th";
     const cellText: TextStyle = { ...diff };
-    if (isTh && !style.props.has("font-weight")) cellText.weight = "bold";
+    // <th> is bold unless the author sets font-weight on it.
+    if (isTh && !style.own.has("font-weight")) cellText.weight = "bold";
     if (Object.keys(cellText).length) children = [{ kind: "styled-block", style: cellText, children }];
 
     const cell: TableCell = { children };
     if (colspan > 1) cell.colspan = colspan;
     if (rowspan > 1) cell.rowspan = rowspan;
-    const align = hAlign(style.props.get("text-align")) ?? hAlign(attr(td, "align")) ?? (isTh ? "center" : undefined);
+    // <th> is centered unless the author sets text-align (even to `inherit`).
+    const align = hAlign(style.props.get("text-align")) ?? hAlign(attr(td, "align")) ?? (isTh && !style.own.has("text-align") ? "center" : undefined);
     if (align && align !== "start" && align !== "left") cell.align = align;
     const fill =
       backgroundOf(style.props, opacityOf(style)) ??
@@ -915,6 +1032,33 @@ function svgDataUri(el: Element, color: string | undefined): string {
   return `data:image/svg+xml;base64,${Buffer.from(markup, "utf8").toString("base64")}`;
 }
 
+/** Takes the vertical margins off a single block, to put them on a wrapper. */
+function hoistMargins(content: Block[]): Margins | undefined {
+  const only = content.length === 1 ? content[0]! : undefined;
+  if (!only) return undefined;
+  if (only.kind === "styled-block") return hoistMargins(only.children);
+  let out: Margins | undefined;
+  if (only.kind === "box" && (only.style.above || only.style.below)) {
+    out = { ...(only.style.above ? { above: only.style.above } : {}), ...(only.style.below ? { below: only.style.below } : {}) };
+    delete only.style.above;
+    delete only.style.below;
+  } else if ("margins" in only && only.margins) {
+    out = only.margins;
+    delete only.margins;
+  }
+  return out;
+}
+
+const MARGIN_KINDS = new Set<Block["kind"]>(["paragraph", "heading", "list", "table", "raw-block", "rule", "grid", "flow"]);
+
+/** Wraps a text node in an element that no selector matches, as CSS's anonymous boxes. */
+function anonymousItem(text: TextNode, parent: Element): Element {
+  return {
+    nodeName: "anonymous-box", tagName: "anonymous-box", attrs: [], namespaceURI: parent.namespaceURI,
+    childNodes: [text], parentNode: parent,
+  } as unknown as Element;
+}
+
 function displayOf(el: Element, s: ComputedStyle): "none" | "inline" | "block" | "flex" | "grid" {
   const d = s.props.get("display");
   if (d === "none") return "none";
@@ -978,11 +1122,14 @@ function borderStroke(
 
 function parseTrackList(value: string, ctx: LengthContext): Size[] | undefined {
   const tracks: Size[] = [];
-  const expanded = value.replace(/repeat\(\s*(\d+)\s*,\s*([^)]+)\)/g, (_, n: string, t: string) =>
+  const expanded = value.replace(/repeat\(\s*(\d+)\s*,\s*((?:[^()]|\([^()]*\))+)\)/g, (_, n: string, t: string) =>
     Array.from({ length: Number(n) }, () => t.trim()).join(" "),
   );
-  for (const token of splitValue(expanded)) {
-    if (token === "auto") tracks.push("auto");
+  for (let token of splitValue(expanded)) {
+    // minmax(min, max): the max track size decides the layout once there is room.
+    const minmax = /^minmax\(\s*([^,]+),\s*([^)]+)\)$/.exec(token);
+    if (minmax) token = /^(?:auto|max-content|min-content)$/.test(minmax[2]!.trim()) ? "auto" : minmax[2]!.trim();
+    if (/^(?:auto|max-content|min-content|fit-content\(.*\))$/.test(token)) tracks.push("auto");
     else if (/^\d*\.?\d+fr$/.test(token)) tracks.push({ value: Number(token.slice(0, -2)), unit: "fr" });
     else {
       const l = parseLength(token, ctx);
@@ -1041,7 +1188,9 @@ function backgroundOf(p: ReadonlyMap<string, string>, opacity: number): Paint | 
   if (gradient) {
     return { ...gradient, stops: gradient.stops.map((st) => ({ ...st, color: withAlpha(st.color, opacity) })) };
   }
-  const color = parseColor(p.get("background-color") ?? "");
+  let color = parseColor(p.get("background-color") ?? "");
+  const overlay = parseInsetFill(p.get("box-shadow") ?? "");
+  if (overlay) color = overColor(color ?? "#00000000", overlay);
   if (!color || color === "#00000000") return undefined;
   return withAlpha(color, opacity);
 }
@@ -1087,19 +1236,15 @@ function unescapeCss(s: string): string {
   );
 }
 
-/**
- * Gap between lines for a CSS `line-height`. Line boxes span the font's
- * ascender to descender (about 1em), so the gap is the line height minus 1em;
- * `normal` matches the document default (≈1.2).
- */
-export function lineGap(value: string | undefined, s: ComputedStyle): Length | undefined {
+/** A CSS `line-height` as a multiple of the element's font size. */
+export function lineHeightOf(value: string | undefined, s: ComputedStyle): LineHeight | undefined {
   const v = value?.trim();
-  if (!v || v === "normal") return { value: 0.2, unit: "em" };
-  if (/^\d*\.?\d+$/.test(v)) return { value: round(Number(v) - 1), unit: "em" };
+  if (!v || v === "normal") return "normal";
+  if (/^\d*\.?\d+$/.test(v)) return round(Number(v));
   const l = parseLength(v, lengthContext(s));
   if (!l) return undefined;
-  if (l.unit === "%") return { value: round(l.value / 100 - 1), unit: "em" };
-  if (l.unit === "em") return { value: round(l.value - 1), unit: "em" };
-  const pt = l.unit === "pt" ? l.value : undefined;
-  return pt === undefined ? undefined : { value: round(pt - s.fontSize), unit: "pt" };
+  if (l.unit === "%") return round(l.value / 100);
+  if (l.unit === "em") return round(l.value);
+  const pt = toPt(l);
+  return pt === undefined || s.fontSize <= 0 ? undefined : round(pt / s.fontSize);
 }

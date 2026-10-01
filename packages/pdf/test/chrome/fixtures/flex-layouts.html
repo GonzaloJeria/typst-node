@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 15mm }
+  * { box-sizing: border-box }
+  body { margin: 0; font-family: sans-serif; font-size: 10pt; line-height: 1.4; color: #222 }
+  h2 { font-size: 13pt; margin: 18px 0 8px }
+  .row { display: flex; flex-wrap: wrap; row-gap: 8px }
+  .col-half { width: 50%; padding: 0 6px }
+  .col-third { width: 33.3333%; padding: 0 6px }
+  .tile { background: #e8eefc; border: 1px solid #b8c6f0; border-radius: 6px; padding: 8px }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px 8px }
+  .chip { background: #222; color: white; border-radius: 999px; padding: 2px 10px; font-size: 9pt }
+  .stack { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 1px dashed #999; padding: 10px }
+  .badge { background: #ffd54a; padding: 4px 12px; border-radius: 4px }
+  .bar { width: calc(100% - 40px); margin-left: 20px; background: #c8e6c9; padding: 6px }
+  .right { display: flex; flex-direction: column; align-items: flex-end }
+</style>
+</head>
+<body>
+  <h2>Filas que se parten (porcentajes)</h2>
+  <div class="row">
+    <div class="col-half"><div class="tile">Mitad 1</div></div>
+    <div class="col-half"><div class="tile">Mitad 2</div></div>
+    <div class="col-third"><div class="tile">Tercio 1</div></div>
+    <div class="col-third"><div class="tile">Tercio 2</div></div>
+    <div class="col-third"><div class="tile">Tercio 3</div></div>
+  </div>
+
+  <h2>Etiquetas que fluyen</h2>
+  <div class="chips">
+    <span class="chip">TypeScript</span><span class="chip">Typst</span><span class="chip">PDF</span>
+    <span class="chip">Cloud Run</span><span class="chip">Tailwind</span><span class="chip">Bootstrap</span>
+    <span class="chip">HTML</span><span class="chip">CSS</span><span class="chip">Node.js</span>
+    <span class="chip">Chrome</span><span class="chip">Playwright</span><span class="chip">pnpm</span>
+    <span class="chip">Vitest</span><span class="chip">Rust</span><span class="chip">jemalloc</span>
+    <span class="chip">musl</span><span class="chip">Inter</span><span class="chip">GitHub Actions</span>
+  </div>
+
+  <h2>Columna centrada</h2>
+  <div class="stack">
+    <span class="badge">Primero</span>
+    <span class="badge">Un elemento más largo</span>
+    <span class="badge">Último</span>
+  </div>
+
+  <h2>Columna a la derecha</h2>
+  <div class="right">
+    <div>Total neto: $1.000</div>
+    <div><strong>Total: $1.190</strong></div>
+  </div>
+
+  <h2>calc() con porcentaje</h2>
+  <div class="bar">Ancho calc(100% - 40px), con margen de 20px.</div>
+</body>
+</html>

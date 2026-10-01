@@ -64,7 +64,7 @@ describe("cascade", () => {
   it("inherits text properties and only emits differences", () => {
     const blocks = body('<div style="color: red"><p>a <span style="color: red">b</span></p></div>');
     expect(blocks).toEqual([
-      { kind: "styled-block", style: { fill: "#ff0000" }, children: [{ kind: "paragraph", children: [{ kind: "text", value: "a b" }] }] },
+      { kind: "styled-block", style: { fill: "#ff0000" }, children: [{ kind: "paragraph", children: [{ kind: "text", value: "a b" }], margins: { above: { value: 12, unit: "pt" }, below: { value: 12, unit: "pt" } } }] },
     ]);
   });
 
@@ -93,9 +93,9 @@ describe("cascade", () => {
 describe("blocks", () => {
   it("maps headings, lists and code", () => {
     const blocks = body('<h2>T</h2><ol start="3"><li>a</li><li>b</li></ol><pre><code class="language-ts">let a = 1;\n</code></pre><hr>');
-    expect(blocks.map((b) => b.kind)).toEqual(["heading", "list", "raw-block", "rule"]);
-    expect(blocks[1]).toMatchObject({ ordered: true, start: 3 });
-    expect(blocks[2]).toEqual({ kind: "raw-block", value: "let a = 1;", lang: "ts" });
+    expect(blocks.map((b) => b.kind)).toEqual(["heading", "box", "raw-block", "rule"]);
+    expect(blocks[1]).toMatchObject({ style: { inset: { left: { value: 30, unit: "pt" } } }, children: [{ kind: "list", ordered: true, start: 3 }] });
+    expect(blocks[2]).toMatchObject({ kind: "raw-block", value: "let a = 1;", lang: "ts" });
   });
 
   it("maps page breaks and break-inside", () => {

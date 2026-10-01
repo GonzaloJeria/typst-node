@@ -1,4 +1,4 @@
-import type { BackgroundImage, Block, BoxStyle, FirstPage, Length, PageRun, PageSetup, Sides, Stroke, Document, Inline, MarginBand, MarginBox, Shadow, Size, TableCell, TableRow, TextStyle, TransformOp } from "./ir.js";
+import type { BackgroundImage, Block, BoxStyle, FirstPage, Length, LineHeight, PageRun, PageSetup, Sides, Stroke, Document, Inline, MarginBand, MarginBox, Shadow, Size, TableCell, TableRow, TextStyle, TransformOp } from "./ir.js";
 import { align, call, color, length, num, paint, sides, size, str, stroke } from "./literals.js";
 
 /**
@@ -9,8 +9,9 @@ import { align, call, color, length, num, paint, sides, size, str, stroke } from
 export function emitDocument(doc: Document): string {
   const lines: string[] = [];
   if (doc.page) lines.push("#" + call("set page", pageArgs(doc.page)));
-  // CSS line boxes span the font's ascender to descender; Typst's default
-  // cap-height/baseline edges would let lines of text touch or overlap.
+  // CSS line boxes: `line-height: normal` spans the font's ascender to
+  // descender (Typst's default cap-height/baseline edges would let lines
+  // touch); other line heights add half the extra space above and below.
   const text = {
     ...textArgs(doc.text ?? {}),
     lang: doc.lang === undefined ? undefined : str(doc.lang),
@@ -18,8 +19,17 @@ export function emitDocument(doc: Document): string {
     "bottom-edge": str("descender"),
   };
   lines.push("#" + call("set text", text));
-  lines.push("#" + call("set par", { leading: doc.leading ? length(doc.leading) : LINE_GAP }));
-  lines.push(`#${seq(doc.children.map(emitBlock))}`);
+  // Blocks are spaced only by CSS margins (collapsing like Typst's weak spacing).
+  lines.push("#" + call("set par", { leading: "0pt", spacing: "0pt" }));
+  lines.push("#" + call("set block", { spacing: "0pt" }));
+  lines.push(LINE_HEIGHT_FN);
+  if (typeof doc.lineHeight === "number") lines.push(`#show: css-line-height.with(${num(doc.lineHeight)})`);
+  // Headings keep their element (for the PDF outline) but take size and
+  // weight from CSS, like any other block.
+  lines.push("#show heading: it => it.body");
+  // Typst drops spacing at the start of the page; CSS keeps the first block's
+  // top margin (it does not collapse through the page). An empty block keeps it.
+  lines.push(`#${seq(["block(height: 0pt)", ...emitBlocks(doc.children)])}`);
   return lines.join("\n") + "\n";
 }
 
@@ -68,13 +78,28 @@ function pageRun(run: PageRun): string {
   if (run.text || run.lang) {
     body.push(call("set text", { ...textArgs(run.text ?? {}), lang: run.lang === undefined ? undefined : str(run.lang) }));
   }
-  if (run.leading) body.push(call("set par", { leading: length(run.leading) }));
-  body.push(...run.children.map(emitBlock));
+  if (typeof run.lineHeight === "number") body.push(`show: css-line-height.with(${num(run.lineHeight)})`);
+  body.push("block(height: 0pt)", ...emitBlocks(run.children));
   return `{\n${body.map((i) => indent(i)).join("\n")}\n}`;
 }
 
-/** Gap between line boxes that approximates `line-height: normal` (≈1.2). */
-const LINE_GAP = "0.2em";
+/**
+ * Sets text edges so each line box is `l` em tall with the glyphs centered,
+ * as CSS does. The font's ascender and descender are measured in context.
+ */
+const LINE_HEIGHT_FN = `#let css-line-height(l, body) = context {
+  let m(t, b) = measure(text(top-edge: t, bottom-edge: b, "x")).height / text.size
+  let (a, d) = (m("ascender", "baseline"), m("baseline", "descender"))
+  let h = (l - a - d) / 2
+  set text(top-edge: (a + h) * 1em, bottom-edge: -(d + h) * 1em)
+  body
+}`;
+
+function withLineHeight(l: LineHeight | undefined, body: string): string {
+  if (l === undefined) return body;
+  if (l === "normal") return call("text", { "top-edge": str("ascender"), "bottom-edge": str("descender") }, body);
+  return `css-line-height(${num(l)}, ${body})`;
+}
 
 /** Joins content values; a code block concatenates its expressions. */
 /** The current page's resolved margins (Typst's `auto` default included). */
@@ -155,8 +180,82 @@ function inlines(nodes: Inline[]): string {
   return seq(nodes.map(emitInline));
 }
 
+/**
+ * A grid cell's content. Flex and grid items keep their margins inside the
+ * cell, but Typst drops spacing at the start and end of a container: empty
+ * blocks hold it in place.
+ */
+function gridCell(nodes: Block[]): string {
+  const margin = (b: Block | undefined, side: "above" | "below"): boolean => {
+    if (!b) return false;
+    if (b.kind === "box") return !!b.style[side] || margin(side === "above" ? b.children[0] : b.children.at(-1), side);
+    if (b.kind === "pad" || b.kind === "styled-block") return margin(side === "above" ? b.children[0] : b.children.at(-1), side);
+    return "margins" in b && !!b.margins?.[side];
+  };
+  const strut = "block(height: 0pt)";
+  const body = emitBlocks(nodes);
+  if (margin(nodes[0], "above")) body.unshift(strut);
+  if (margin(nodes.at(-1), "below")) body.push(strut);
+  return seq(body);
+}
+
 function blocks(nodes: Block[]): string {
-  return seq(nodes.map(emitBlock));
+  return seq(emitBlocks(nodes));
+}
+
+/**
+ * Emits sibling blocks. Typst collapses adjacent spacing to the larger one,
+ * which matches CSS for positive margins; a negative top margin is combined
+ * with the previous bottom margin by hand (`12px` and `-12px` give 0).
+ */
+function emitBlocks(nodes: Block[]): string[] {
+  const out: string[] = [];
+  let prev: Block | undefined;
+  for (let node of nodes) {
+    const above = edgeMargin(node, "above");
+    if (above && above.value < 0) {
+      node = structuredClone(node);
+      setEdgeMargin(node, "above", undefined);
+      const below = prev && edgeMargin(prev, "below");
+      if (below && below.value > 0 && out.length) {
+        const copy = structuredClone(prev!);
+        setEdgeMargin(copy, "below", undefined);
+        out[out.length - 1] = emitBlock(copy);
+        out.push(`v(${length(below)} + ${length(above)})`);
+      } else out.push(`v(${length(above)})`);
+    }
+    out.push(emitBlock(node));
+    prev = node;
+  }
+  return out;
+}
+
+type Edge = "above" | "below";
+
+/** The top or bottom margin a block carries, looking through wrappers. */
+function edgeMargin(b: Block, side: Edge): Length | undefined {
+  if (b.kind === "box") return b.style[side] ?? (b.style.inset || b.style.stroke ? undefined : edgeOfChildren(b.children, side));
+  if ("margins" in b && b.margins?.[side]) return b.margins[side];
+  if (b.kind === "styled-block" || b.kind === "transform") return edgeOfChildren(b.children, side);
+  return undefined;
+}
+
+function edgeOfChildren(children: Block[], side: Edge): Length | undefined {
+  const child = side === "above" ? children[0] : children.at(-1);
+  return child && edgeMargin(child, side);
+}
+
+function setEdgeMargin(b: Block, side: Edge, value: Length | undefined): void {
+  if (b.kind === "box" && b.style[side]) {
+    if (value) b.style[side] = value;
+    else delete b.style[side];
+  } else if ("margins" in b && b.margins?.[side]) {
+    if (value) b.margins[side] = value;
+    else delete b.margins[side];
+  } else if (b.kind === "box" || b.kind === "styled-block" || b.kind === "transform") {
+    const child = side === "above" ? b.children[0] : b.children.at(-1);
+    if (child) setEdgeMargin(child, side, value);
+  }
 }
 
 function imageCall(n: { src: string; width?: Size; height?: Size; alt?: string }): string {
@@ -172,37 +271,52 @@ function imageCall(n: { src: string; width?: Size; height?: Size; alt?: string }
 }
 
 export function emitBlock(node: Block): string {
+  const out = emitBlockBody(node);
+  const m = "margins" in node ? node.margins : undefined;
+  // Full width: an auto-width block would shrink to its content and defeat `align`.
+  return m ? call("block", { width: "100%", above: m.above && length(m.above), below: m.below && length(m.below) }, out) : out;
+}
+
+function emitBlockBody(node: Block): string {
   switch (node.kind) {
     case "paragraph": {
       const body = call(
         "par",
         {
           justify: node.justify === undefined ? undefined : String(node.justify),
-          leading: node.leading && length(node.leading),
         },
         inlines(node.children),
       );
-      return node.align ? `align(${align(node.align)}, ${body})` : body;
+      const aligned = node.align ? `align(${align(node.align)}, ${body})` : body;
+      return withLineHeight(node.lineHeight, aligned);
     }
     case "heading": {
-      const body = call("heading", { level: String(node.level) }, inlines(node.children));
+      const content = inlines(node.children);
+      const body = withLineHeight(node.lineHeight, call("heading", { level: String(node.level) }, node.style ? call("text", textArgs(node.style), content) : content));
       // Full width, so an enclosing auto-width block cannot shrink it to its text.
       return node.align ? `block(width: 100%, align(${align(node.align)}, ${body}))` : body;
     }
     case "list": {
+      // CSS markers hang outside the content box, in the list's padding: a
+      // zero-width box right-aligns them just left of the text.
       const items = node.items.map(blocks);
-      return node.ordered
-        ? call(
-            "enum",
-            {
-              start: node.start === undefined ? undefined : num(node.start),
-              numbering: node.numbering === undefined ? undefined : str(node.numbering),
-              // An empty numbering pattern hides the numbers (`list-style: none`).
-              ...(node.numbering === "" ? { numbering: "n => []" } : {}),
-            },
-            ...items,
-          )
-        : call("list", { marker: node.marker === undefined ? undefined : node.marker === "" ? "[]" : str(node.marker) }, ...items);
+      const hang = (marker: string) => `box(width: 0pt, align(right, ${marker} + h(0.5em)))`;
+      const layout = { indent: "0pt", "body-indent": "0pt" };
+      if (node.ordered) {
+        const pattern = node.numbering === undefined ? "1." : node.numbering;
+        return call(
+          "enum",
+          {
+            start: node.start === undefined ? undefined : num(node.start),
+            ...layout,
+            // An empty numbering pattern hides the numbers (`list-style: none`).
+            numbering: pattern === "" ? "n => []" : `n => ${hang(`numbering(${str(pattern)}, n)`)}`,
+          },
+          ...items,
+        );
+      }
+      const marker = node.marker === undefined ? "[•]" : node.marker === "" ? undefined : `[${str(node.marker)}]`.replace(/^\[(".*")\]$/, "$1");
+      return call("list", { ...layout, marker: marker === undefined ? "[]" : hang(marker) }, ...items);
     }
     case "box":
       return boxBlock(node.style, node.children);
@@ -243,7 +357,7 @@ export function emitBlock(node: Block): string {
                 : "width" in node.stroke
                   ? stroke(node.stroke as Stroke)
                   : tableSides(node.stroke),
-          inset: node.inset && length(node.inset),
+          inset: node.inset && ("unit" in node.inset ? length(node.inset) : sides(node.inset, length)),
         },
         ...parts,
       );
@@ -259,10 +373,18 @@ export function emitBlock(node: Block): string {
                 "row-gutter": node.gutter && length(node.gutter),
               }
             : { gutter: node.gutter && length(node.gutter) }),
-          align: node.valign,
+          align: [node.halign && align(node.halign), node.valign].filter(Boolean).join(" + ") || undefined,
         },
-        ...node.cells.map(blocks),
+        ...node.cells.map(gridCell),
       );
+    case "flow": {
+      // Weak spacing between items disappears where a line wraps.
+      const gap = node.gap ? `h(${length(node.gap)}, weak: true)` : undefined;
+      const items = node.items.map((it) => call("box", { width: it.width && size(it.width) }, gridCell(it.children)));
+      const line = call("par", {}, seq(gap ? items.flatMap((it, i) => (i ? [gap, it] : [it])) : items));
+      const body = `{\n${indent(`set par(leading: ${node.rowGap ? length(node.rowGap) : "0pt"}, justify: false)`)}\n${indent(node.align ? `align(${align(node.align)}, ${line})` : line)}\n}`;
+      return call("block", { width: "100%" }, body);
+    }
     case "raw-block":
       return call("raw", { block: "true", lang: node.lang === undefined ? undefined : str(node.lang) }, str(node.value));
     case "rule":
@@ -322,6 +444,8 @@ function boxBlock(s: BoxStyle, children: Block[]): string {
   const outer = (l: Length) => (s.borderBox || !vpad.length ? length(l) : [length(l), ...vpad].join(" + "));
   const inner = (l: Length) => (!s.borderBox || !vpad.length ? length(l) : [length(l), ...vpad].join(" - "));
   let body = blocks(children);
+  // `align` around the block would also align its contents: reset them.
+  if (s.align) body = `align(start, ${body})`;
   // A zero-width strut column keeps the row at least `min-height` tall.
   if (s.minHeight) body = call("grid", { columns: "(0pt, 1fr)" }, call("block", { height: inner(s.minHeight) }), body);
   const spacing = {
@@ -329,8 +453,10 @@ function boxBlock(s: BoxStyle, children: Block[]): string {
     below: s.below && length(s.below),
     breakable: s.breakable === undefined ? undefined : String(s.breakable),
   };
+  const hpad = [s.inset?.left, s.inset?.right].filter((l): l is Length => !!l).map(length);
+  const width = s.width && (s.contentWidth && hpad.length ? [size(s.width), ...hpad].join(" + ") : size(s.width));
   const args = {
-    width: s.width && size(s.width),
+    width,
     height: s.height && outer(s.height),
     inset: s.inset && sides(s.inset, length),
     fill: s.fill && paint(s.fill),

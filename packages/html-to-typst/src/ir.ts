@@ -8,6 +8,8 @@ export type LengthUnit = "pt" | "mm" | "cm" | "in" | "em" | "%" | "fr";
 export interface Length {
   value: number;
   unit: LengthUnit;
+  /** For `%` only: an absolute part in pt, from `calc(100% - 2rem)`. */
+  offset?: number;
 }
 export type Size = Length | "auto";
 
@@ -74,6 +76,8 @@ export interface BoxStyle {
   minHeight?: Length;
   /** `box-sizing: border-box`: heights already include the padding. */
   borderBox?: boolean;
+  /** `width` is a CSS content-box width: horizontal padding is added. */
+  contentWidth?: boolean;
   /** `background-image: url()`, painted over the fill and under the content. */
   image?: BackgroundImage;
   inset?: Sides<Length>;
@@ -147,21 +151,31 @@ export interface TableRow {
   cells: TableCell[];
 }
 
+/** Vertical CSS margins of a block that needs no other box styling. */
+export interface Margins {
+  above?: Length;
+  below?: Length;
+}
+
+/** A CSS `line-height` as a multiple of the font size, or the font's own `normal`. */
+export type LineHeight = number | "normal";
+
 export type Block =
   | {
       kind: "paragraph";
       children: Inline[];
       align?: HAlign;
       justify?: boolean;
-      /** Gap between lines, when `line-height` differs from the document's. */
-      leading?: Length;
+      /** CSS `line-height` in em, when it differs from the document's. */
+      lineHeight?: LineHeight;
+      margins?: Margins;
     }
   /** Horizontal margins (outside the box, like CSS). */
-  | { kind: "pad"; left?: Length; right?: Length; children: Block[] }
+  | { kind: "pad"; left?: Length; right?: Length; children: Block[]; margins?: Margins }
   | PageRun
   /** CSS multi-column layout (`column-count`). */
   | { kind: "columns"; count: number; gutter?: Length; children: Block[] }
-  | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[]; align?: HAlign }
+  | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[]; align?: HAlign; style?: TextStyle; lineHeight?: LineHeight; margins?: Margins }
   | {
       kind: "list";
       ordered: boolean;
@@ -171,6 +185,7 @@ export type Block =
       /** Typst numbering pattern for ordered lists, e.g. "a." or "I.". */
       numbering?: string;
       items: Block[][];
+      margins?: Margins;
     }
   | { kind: "box"; style: BoxStyle; children: Block[] }
   | { kind: "styled-block"; style: TextStyle; children: Block[] }
@@ -183,7 +198,8 @@ export type Block =
       footer?: TableRow[];
       /** Per-cell stroke: one for all sides, or per side (e.g. only bottom rules). */
       stroke?: Stroke | Sides<Stroke> | null;
-      inset?: Length;
+      inset?: Length | Sides<Length>;
+      margins?: Margins;
     }
   | {
       kind: "grid";
@@ -193,10 +209,22 @@ export type Block =
       columnGutters?: Length[];
       /** Vertical alignment of every cell (CSS `align-items`). */
       valign?: "top" | "horizon" | "bottom";
+      /** Horizontal alignment of every cell (`align-items` in a flex column). */
+      halign?: HAlign;
       cells: Block[][];
+      margins?: Margins;
     }
-  | { kind: "raw-block"; value: string; lang?: string }
-  | { kind: "rule" }
+  /** Wrapping flex items laid out like inline blocks (`flex-wrap: wrap`). */
+  | {
+      kind: "flow";
+      items: { width?: Size; children: Block[] }[];
+      gap?: Length;
+      rowGap?: Length;
+      align?: HAlign;
+      margins?: Margins;
+    }
+  | { kind: "raw-block"; value: string; lang?: string; margins?: Margins }
+  | { kind: "rule"; margins?: Margins }
   | { kind: "pagebreak"; weak?: boolean }
   | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string }
   /**
@@ -266,7 +294,7 @@ export interface PageRun {
   name?: string;
   page?: PageSetup;
   text?: TextStyle;
-  leading?: Length;
+  lineHeight?: LineHeight;
   lang?: string;
   children: Block[];
 }
@@ -275,8 +303,8 @@ export interface Document {
   page?: PageSetup;
   /** Document-wide text defaults (from `body`/`html`). */
   text?: TextStyle;
-  /** Document-wide gap between lines (from the body's `line-height`). */
-  leading?: Length;
+  /** Document-wide `line-height` in em (from the body's). */
+  lineHeight?: LineHeight;
   lang?: string;
   children: Block[];
 }

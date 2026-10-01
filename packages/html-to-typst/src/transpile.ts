@@ -1,8 +1,9 @@
 import { parse } from "parse5";
 import { Cascade } from "./css/cascade.js";
 import { parseStylesheet, type Declaration } from "./css/parse.js";
-import { expandBox, parseColor, parseFontSize, parseGradient, parseLength, splitValue, type LengthContext } from "./css/values.js";
-import { backgroundImage, Converter, lineGap, type ConvertOptions } from "./convert.js";
+import { expandBox, parseColor, parseFontSize, parseGradient, parseLength, splitValue, toPt, type LengthContext } from "./css/values.js";
+import type { MediaContext } from "./css/conditions.js";
+import { backgroundImage, Converter, lineHeightOf, type ConvertOptions } from "./convert.js";
 import { expandShorthand } from "./css/cascade.js";
 import { attr, findAll, findFirst, isText } from "./dom.js";
 import { emitDocument } from "./emit.js";
@@ -40,7 +41,8 @@ export interface TranspileResult {
 export function htmlToTypst(html: string, options: TranspileOptions = {}): TranspileResult {
   const doc = parse(html);
   // Minimal user-agent defaults for presentational tags not mapped to IR nodes.
-  const sheet = parseStylesheet(UA_CSS);
+  // User-agent rules go in the first (weakest) cascade layer, below every author rule.
+  const sheet = parseStylesheet(`@layer user-agent { ${UA_CSS} }`);
   for (const style of findAll(doc, "style")) {
     parseStylesheet(style.childNodes.filter(isText).map((t) => t.value).join(""), sheet);
   }
@@ -48,7 +50,8 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
 
   const htmlEl = findFirst(doc, "html")!;
   const body = findFirst(doc, "body")!;
-  const cascade = new Cascade(sheet, options.rootFontSize ?? 12);
+  const rootFontSize = options.rootFontSize ?? 12;
+  const cascade = new Cascade(sheet, rootFontSize, pageMedia(sheet.page, rootFontSize));
   const converter = new Converter(cascade, options);
 
   const htmlStyle = converter.style(htmlEl, undefined);
@@ -62,8 +65,8 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
 
   converter.baseLineHeight = bodyStyle.props.get("line-height");
   const document: Document = { text, children: converter.blocks(body, bodyStyle) };
-  const leading = lineGap(converter.baseLineHeight, bodyStyle);
-  if (leading && converter.baseLineHeight && converter.baseLineHeight !== "normal") document.leading = leading;
+  const lineHeight = lineHeightOf(converter.baseLineHeight, bodyStyle);
+  if (lineHeight !== undefined && lineHeight !== "normal") document.lineHeight = lineHeight;
   const ctx = { fontSize: bodyStyle.fontSize, rootFontSize: cascade.rootFontSize };
   const page = pageSetup(sheet.page, ctx, converter.warnings) ?? {};
   // Paged media paints the canvas with the root/body background.
@@ -108,7 +111,7 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   const lang = attr(htmlEl, "lang")?.split("-")[0]?.toLowerCase();
   if (lang && /^[a-z]{2,3}$/.test(lang)) document.lang = lang;
 
-  const warnings = [...converter.warnings, ...cascade.warnings];
+  const warnings = [...new Set([...converter.warnings, ...cascade.warnings])];
   if (options.strict && warnings.length) throw new TranspileError(warnings);
 
   // Every image the document references: <img> and CSS background images.
@@ -143,6 +146,7 @@ function resolveRuns(
     }
     if (b.kind === "list") b.items = b.items.map((i) => resolveRuns(i, false, setupOf, warnings));
     if (b.kind === "grid") b.cells = b.cells.map((c) => resolveRuns(c, false, setupOf, warnings));
+    if (b.kind === "flow") for (const item of b.items) item.children = resolveRuns(item.children, false, setupOf, warnings);
     if (b.kind === "table") {
       for (const rows of [b.header, b.body, b.footer]) {
         for (const row of rows ?? []) for (const cell of row.cells) cell.children = resolveRuns(cell.children, false, setupOf, warnings);
@@ -152,7 +156,19 @@ function resolveRuns(
   });
 }
 
+/** Browser defaults (Chrome's user-agent stylesheet) for what the converter does not hard-code. */
 const UA_CSS = `
+  h1 { font-size: 2em; font-weight: bold; margin: 0.67em 0 }
+  h2 { font-size: 1.5em; font-weight: bold; margin: 0.83em 0 }
+  h3 { font-size: 1.17em; font-weight: bold; margin: 1em 0 }
+  h4 { font-size: 1em; font-weight: bold; margin: 1.33em 0 }
+  h5 { font-size: 0.83em; font-weight: bold; margin: 1.67em 0 }
+  h6 { font-size: 0.67em; font-weight: bold; margin: 2.33em 0 }
+  p, ul, ol, dl, pre, figure { margin: 1em 0 }
+  ul, ol { padding-left: 40px }
+  li ul, li ol { margin: 0 }
+  blockquote { margin: 1em 40px }
+  hr { margin: 0.5em 0 }
   small { font-size: smaller }
   big { font-size: larger }
   mark { background-color: yellow }
@@ -163,6 +179,22 @@ const PAPER: Record<string, string> = {
   a3: "a3", a4: "a4", a5: "a5", a6: "a6", b4: "iso-b4", b5: "iso-b5", "jis-b4": "jis-b4", "jis-b5": "jis-b5",
   letter: "us-letter", legal: "us-legal", ledger: "us-tabloid",
 };
+
+/** Paper sizes in mm (width × height, portrait). */
+const PAPER_MM: Record<string, [number, number]> = {
+  a3: [297, 420], a4: [210, 297], a5: [148, 210], a6: [105, 148], "iso-b4": [250, 353], "iso-b5": [176, 250],
+  "jis-b4": [257, 364], "jis-b5": [182, 257], "us-letter": [215.9, 279.4], "us-legal": [215.9, 355.6], "us-tabloid": [279.4, 431.8],
+};
+
+/** The page box in CSS px, which media queries are evaluated against (as Chrome does when printing). */
+function pageMedia(decls: Declaration[], rootFontSize: number): MediaContext {
+  const page = pageSetup(decls.filter((d) => d.property === "size"), { fontSize: rootFontSize, rootFontSize }, new Set()) ?? {};
+  const pt = (l: Length | undefined) => (l && toPt(l)) ?? undefined;
+  let [w, h] = (PAPER_MM[page.paper ?? "a4"] ?? PAPER_MM.a4!).map((mm) => (mm * 72) / 25.4) as [number, number];
+  if (page.width) [w, h] = [pt(page.width) ?? w, pt(page.height) ?? h];
+  if (page.flipped) [w, h] = [h, w];
+  return { width: (w * 4) / 3, height: (h * 4) / 3 };
+}
 
 function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<string>, first = false): PageSetup | undefined {
   const page: PageSetup = {};

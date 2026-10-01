@@ -61,7 +61,7 @@ export function composeToTypst(input: ComposeInput, options: TranspileOptions = 
       kind: "page-run",
       ...(doc.page ? { page: doc.page } : {}),
       ...(doc.text ? { text: doc.text } : {}),
-      ...(doc.leading ? { leading: doc.leading } : {}),
+      ...(doc.lineHeight !== undefined ? { lineHeight: doc.lineHeight } : {}),
       ...(doc.lang ? { lang: doc.lang } : {}),
       children: doc.children,
     });

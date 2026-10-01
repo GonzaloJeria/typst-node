@@ -69,20 +69,43 @@ describe("flex align-items", () => {
     expect(flex("flex-start", `align-items:${value}`).grid.valign).toBe(expected);
   });
 
-  it("warns where it is not converted", () => {
-    const { warnings } = grid(`<div style="display:flex; flex-direction:column; align-items:center"><div>A</div></div>`);
-    expect(warnings).toEqual(["Unsupported CSS ignored: align-items: center with flex-direction: column"]);
+  it("centers items of a flex column", () => {
+    const { grid: g, warnings } = grid(`<div style="display:flex; flex-direction:column; align-items:center; gap: 6pt"><div>A</div><div>B</div></div>`);
+    expect(g).toMatchObject({ columns: [{ value: 1, unit: "fr" }], halign: "center", gutter: { value: 6, unit: "pt" } });
+    expect(g.cells).toHaveLength(2);
+    expect(warnings).toEqual([]);
+  });
+
+  it("warns about justify-content in a flex column", () => {
+    const { warnings } = grid(`<div style="display:flex; flex-direction:column; justify-content:center"><div>A</div></div>`);
+    expect(warnings).toEqual(["Unsupported CSS ignored: justify-content: center with flex-direction: column"]);
   });
 });
 
 describe("text-align on headings", () => {
   it("aligns a heading", () => {
-    expect(htmlToTypst(`<h1 style="text-align:center">T</h1>`).source).toContain('align(center, heading(level: 1, "T"))');
+    expect(htmlToTypst(`<h1 style="text-align:center">T</h1>`).source).toContain('align(center, heading(level: 1, text(size: 24pt, weight: "bold", "T")))');
   });
 
   it("inherits the alignment and survives the heading's own margin", () => {
     const { source } = htmlToTypst(`<div style="text-align:right"><h2 style="margin:0 0 10px">T</h2></div>`);
     // Full width, so the margin's auto-width block cannot shrink it.
-    expect(source).toContain('block(width: 100%, align(right, heading(level: 2, "T")))');
+    expect(source).toContain('block(width: 100%, align(right, heading(level: 2, text(size: 18pt, weight: "bold", "T"))))');
+  });
+});
+
+describe("flex-wrap", () => {
+  it("breaks %-sized items into lines of at most 100%", () => {
+    const r = htmlToTypst(`<div style="display:flex; flex-wrap:wrap; row-gap: 4pt">${'<div style="width:50%">x</div>'.repeat(3)}</div>`);
+    const grids = r.document.children.filter((b) => b.kind === "grid");
+    expect(grids.map((g) => (g as { cells: unknown[] }).cells.length)).toEqual([2, 1]);
+    expect(grids[0]).toMatchObject({ margins: { below: { value: 4, unit: "pt" } } });
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("flows other items like inline blocks", () => {
+    const r = htmlToTypst(`<div style="display:flex; flex-wrap:wrap; gap: 4pt 8pt"><span>a</span><span>b</span></div>`);
+    expect(r.document.children[0]).toMatchObject({ kind: "flow", gap: { value: 8, unit: "pt" }, rowGap: { value: 4, unit: "pt" } });
+    expect(r.source).toContain("h(8pt, weak: true)");
   });
 });

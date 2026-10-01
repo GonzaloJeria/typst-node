@@ -1,5 +1,11 @@
 # @gjeria/html-to-typst
 
+## 0.1.2
+
+### Patch Changes
+
+- 233bd08: Modern CSS and browser-like layout. Compiled Tailwind v4 and Bootstrap 5 stylesheets now apply: cascade layers, media queries evaluated against the page size, `@supports`, `@property`, CSS nesting, Selectors Level 4 (`:is`, `:where`, `:not`, `:has`, sibling combinators, `An+B of S`, escaped class names), `oklch()`/`lab()`/`color-mix()` and other CSS Color 4/5 functions, `min()`/`max()`/`clamp()`, viewport units, logical properties, the `font` shorthand and content-box widths. Layout now follows CSS more closely: line boxes from `line-height` (half-leading above and below), block spacing from margins only (with browser defaults for headings, paragraphs and lists, collapsing negative margins), hanging list markers, `flex-wrap`, flex columns with `align-items`, and `calc()` mixing `%` with lengths. Headings take their size and weight from CSS. `pnpm test:chrome` compares the output with Chrome.
+
 ## 0.1.1
 
 ### Patch Changes

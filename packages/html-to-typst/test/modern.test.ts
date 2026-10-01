@@ -134,12 +134,15 @@ describe("text-transform and generated content", () => {
   });
 
   it("replaces list markers with list-style and ::before", () => {
-    const [list] = blocks('<ul class="check"><li>a</li></ul><ol type="A"><li>x</li></ol><ol style="list-style: lower-roman inside"><li>y</li></ol>',
+    const [padded] = blocks('<ul class="check"><li>a</li></ul><ol type="A"><li>x</li></ol><ol style="list-style: lower-roman inside"><li>y</li></ol>',
       "ul.check { list-style: none } ul.check li::before { content: '✓ ' }");
+    // The UA's 40px list padding wraps the list in a box.
+    const list = (padded as { children: unknown[] }).children[0];
     expect(list).toMatchObject({ kind: "list", marker: "", items: [[{ kind: "paragraph", children: [{ kind: "text", value: "✓ a" }] }]] });
     const b = doc('<ol type="A"><li>x</li></ol><ol style="list-style-type: lower-roman"><li>y</li></ol><ul style="list-style-type: square"><li>z</li></ul>');
-    expect(b.document.children.map((x) => (x as { numbering?: string; marker?: string }).numbering ?? (x as { marker?: string }).marker)).toEqual(["A.", "i.", "▪"]);
-    expect(b.source).toContain('enum(numbering: "A."');
+    const lists = b.document.children.map((x) => (x as { children: { numbering?: string; marker?: string }[] }).children[0]!);
+    expect(lists.map((x) => x.numbering ?? x.marker)).toEqual(["A.", "i.", "▪"]);
+    expect(b.source).toContain('numbering: n => box(width: 0pt, align(right, numbering("A.", n) + h(0.5em)))');
     expect(doc('<ol style="list-style: none"><li>x</li></ol>').source).toContain("numbering: n => []");
   });
 

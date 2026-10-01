@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  @layer reset, theme, components;
+  @page { size: A4; margin: 20mm }
+
+  @layer reset {
+    *, ::before, ::after { box-sizing: border-box; margin: 0; padding: 0 }
+  }
+  @layer theme {
+    :root {
+      --brand: oklch(55% 0.2 260);
+      --brand-soft: color-mix(in oklab, var(--brand) 12%, white);
+      --space: clamp(8px, 2vw, 16px);
+      --radius: 0.5rem;
+      font-family: system-ui, sans-serif;
+      color: oklch(25% 0.02 260);
+      line-height: 1.5;
+    }
+  }
+  @layer components {
+    .card {
+      border: 1px solid color-mix(in oklab, var(--brand) 30%, white);
+      border-radius: var(--radius);
+      padding-block: var(--space);
+      padding-inline: calc(var(--space) * 1.5);
+      margin-block-end: var(--space);
+
+      & h2 { color: var(--brand); font-size: 1.25rem; margin-block-end: 0.5rem }
+      &.highlight { background: var(--brand-soft) }
+      :is(p, li) { font-size: 0.95rem }
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space);
+    }
+    .tag {
+      display: inline-block;
+      padding-inline: 0.5em;
+      border-radius: 999px;
+      background: var(--brand);
+      color: white;
+      font-size: 0.75rem;
+    }
+    ul.checks > li:not(:last-child) { margin-block-end: 0.25rem }
+    li:nth-child(2n of .done) { color: oklch(50% 0.15 150) }
+  }
+  @media (min-width: 640px) {
+    h1 { font-size: 2rem }
+  }
+  @media screen {
+    h1 { color: red }
+  }
+  @supports (display: grid) {
+    .note::before { content: "Nota: "; font-weight: 700 }
+  }
+</style>
+</head>
+<body>
+  <h1>CSS moderno</h1>
+  <p style="margin-block: 0.5rem 1rem">Capas, variables, <code>color-mix()</code>, anidado y selectores nivel 4.</p>
+
+  <div class="card highlight">
+    <h2>Resumen <span class="tag">nuevo</span></h2>
+    <p>Este bloque usa <strong>padding-inline</strong>, <em>clamp()</em> y un fondo mezclado en OKLab.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h2>Uno</h2><p>Primera columna.</p></div>
+    <div class="card"><h2>Dos</h2><p>Segunda columna.</p></div>
+    <div class="card"><h2>Tres</h2><p>Tercera columna.</p></div>
+  </div>
+
+  <div class="card">
+    <h2>Tareas</h2>
+    <ul class="checks" style="padding-inline-start: 1.25rem">
+      <li class="done">Migrar estilos</li>
+      <li>Revisar colores</li>
+      <li class="done">Probar impresión</li>
+      <li class="done">Publicar</li>
+    </ul>
+  </div>
+
+  <p class="note">los breakpoints se evalúan contra el ancho de la página.</p>
+</body>
+</html>

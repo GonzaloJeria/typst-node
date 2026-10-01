@@ -20,7 +20,12 @@ describe("values", () => {
   it("rejects unitless non-zero and garbage lengths", () => {
     expect(parseLength("12", ctx)).toBeUndefined();
     expect(parseLength("calc(1px + )", ctx)).toBeUndefined();
-    expect(parseLength("calc(10% + 2px)", ctx)).toBeUndefined();
+  });
+
+  it("keeps calc() mixing % and lengths as a relative length", () => {
+    expect(parseLength("calc(10% + 2px)", ctx)).toEqual({ value: 10, unit: "%", offset: 1.5 });
+    expect(parseLength("calc(100% - 2rem)", ctx)).toEqual({ value: 100, unit: "%", offset: -24 });
+    expect(parseLength("min(100%, 40rem)", ctx)).toBeUndefined();
   });
 
   it.each([
@@ -81,7 +86,11 @@ describe("parser", () => {
       @media print { p { color: green } }
       @font-face { font-family: X }
     `);
-    expect(sheet.rules.map((r) => r.selectors)).toEqual([["h1", ".a > b"], ["p"]]);
+    expect(sheet.rules.map((r) => [r.selectors, r.media])).toEqual([
+      [["h1", ".a > b"], undefined],
+      [["p"], ["screen"]],
+      [["p"], ["print"]],
+    ]);
     expect(sheet.rules[0]!.declarations[0]).toEqual({ property: "color", value: "red", important: true });
     expect(sheet.page.map((d) => d.property)).toEqual(["size", "margin"]);
   });
@@ -131,7 +140,11 @@ describe("selectors", () => {
     expect(matches(parseSelector(":root")!, td)).toBe(false);
   });
 
-  it.each(["a + b", "a ~ b", "a:hover", "a::marker", "a:not(.b)"])("rejects unsupported %s", (sel) => {
+  it.each(["a:unknown", "a:has-text(x)", "a <> b", "a::before b"])("rejects unsupported %s", (sel) => {
     expect(parseSelector(sel)).toBeUndefined();
+  });
+
+  it("never matches interactive states", () => {
+    expect(matches(parseSelector("td:hover")!, td)).toBe(false);
   });
 });

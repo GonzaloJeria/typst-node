@@ -3,11 +3,21 @@
 exports[`official compiler > matches the invoice snapshot 1`] = `
 "#set page(paper: "a4", margin: (top: 18mm, right: 15mm, bottom: 18mm, left: 15mm))
 #set text(font: ("Libertinus Serif",), size: 10pt, fill: rgb("#222222"), lang: "es", top-edge: "ascender", bottom-edge: "descender")
-#set par(leading: 0.2em)
+#set par(leading: 0pt, spacing: 0pt)
+#set block(spacing: 0pt)
+#let css-line-height(l, body) = context {
+  let m(t, b) = measure(text(top-edge: t, bottom-edge: b, "x")).height / text.size
+  let (a, d) = (m("ascender", "baseline"), m("baseline", "descender"))
+  let h = (l - a - d) / 2
+  set text(top-edge: (a + h) * 1em, bottom-edge: -(d + h) * 1em)
+  body
+}
+#show heading: it => it.body
 #{
-  text(fill: rgb("#0a3d62"), block(below: 3pt, heading(level: 1, {
+  block(height: 0pt)
+  block(width: 100%, above: 13.4pt, below: 3pt, heading(level: 1, text(size: 20pt, weight: "bold", fill: rgb("#0a3d62"), {
     "Factura N° 2026-001 "
-    text(size: 8.33pt, "(borrador)")
+    text(size: 16.67pt, "(borrador)")
   })))
   grid(columns: (1fr, 1fr), gutter: 9pt, block(width: 100%, inset: 6pt, stroke: 0.75pt + rgb("#cccccc"), radius: 3pt, breakable: false, par({
     strong("Emisor")
@@ -24,15 +34,15 @@ exports[`official compiler > matches the invoice snapshot 1`] = `
     "Santiago"
   })))
   table(columns: (50%, 1fr, 1fr, 1fr), stroke: 0.5pt + rgb("#999999"), inset: 3pt, table.header(repeat: true, table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Descripción"))), table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Cant."))), table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Precio"))), table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Total")))), par("Servicio *premium* con $variables$ y #hashtags"), table.cell(align: right, par("1")), table.cell(align: right, par("$100")), table.cell(align: right, par("$100")), table.cell(rowspan: 2, fill: rgb("#fafafa"), par("Licencias [anual]")), table.cell(align: right, fill: rgb("#fafafa"), par("2")), table.cell(align: right, fill: rgb("#fafafa"), par("$50")), table.cell(align: right, fill: rgb("#fafafa"), par("$100")), table.cell(colspan: 2, align: right, par("Descuento")), table.cell(align: right, par("-$10")), table.footer(table.cell(colspan: 3, align: right, par("Total")), table.cell(align: right, par(strong("$190")))))
-  text(size: 12pt, weight: "bold", align(right, par("Total a pagar: $190")))
-  list(par("Pago a 30 días"), par({
+  text(size: 12pt, weight: "bold", block(width: 100%, above: 12pt, below: 12pt, align(right, par("Total a pagar: $190"))))
+  block(inset: (left: 30pt), above: 10pt, below: 10pt, list(indent: 0pt, body-indent: 0pt, marker: box(width: 0pt, align(right, [•] + h(0.5em))), par("Pago a 30 días"), par({
     "Transferencia a "
     link("https://example.com/pay?a=1&b=2", "example.com")
-  }))
+  })))
   pagebreak(weak: true)
   text(size: 8pt, {
-    heading(level: 2, "Términos")
-    par(justify: true, "Lorem ipsum \\\\ dolor // sit @amet <label>.")
+    block(width: 100%, above: 9.96pt, below: 9.96pt, heading(level: 2, text(size: 12pt, weight: "bold", "Términos")))
+    block(width: 100%, above: 8pt, below: 8pt, par(justify: true, "Lorem ipsum \\\\ dolor // sit @amet <label>."))
   })
 }
 "

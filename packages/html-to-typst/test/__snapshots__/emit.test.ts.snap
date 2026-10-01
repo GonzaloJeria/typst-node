@@ -3,8 +3,18 @@
 exports[`emitDocument > emits code-mode Typst 1`] = `
 "#set page(paper: "a4", margin: 2cm)
 #set text(font: ("Libertinus Serif",), size: 10pt, lang: "es", top-edge: "ascender", bottom-edge: "descender")
-#set par(leading: 0.2em)
+#set par(leading: 0pt, spacing: 0pt)
+#set block(spacing: 0pt)
+#let css-line-height(l, body) = context {
+  let m(t, b) = measure(text(top-edge: t, bottom-edge: b, "x")).height / text.size
+  let (a, d) = (m("ascender", "baseline"), m("baseline", "descender"))
+  let h = (l - a - d) / 2
+  set text(top-edge: (a + h) * 1em, bottom-edge: -(d + h) * 1em)
+  body
+}
+#show heading: it => it.body
 #{
+  block(height: 0pt)
   heading(level: 1, "Factura #001")
   align(right, par({
     "Total: "
@@ -13,7 +23,7 @@ exports[`emitDocument > emits code-mode Typst 1`] = `
     link("https://example.com", "@example")
   }))
   table(columns: (1fr, auto, auto), table.header(repeat: true, table.cell(colspan: 2, par(strong("Ítem"))), []), table.cell(rowspan: 2, par("A")), [], table.cell(align: right, fill: rgb("#eeeeee"), []), [], [])
-  align(center, block(inset: (top: 4pt), fill: rgb("#fafafa"), breakable: false, enum(start: 3, par("uno"), [])))
+  align(center, block(inset: (top: 4pt), fill: rgb("#fafafa"), breakable: false, align(start, enum(start: 3, indent: 0pt, body-indent: 0pt, numbering: n => box(width: 0pt, align(right, numbering("1.", n) + h(0.5em))), par("uno"), []))))
   pagebreak(weak: true)
   raw(block: true, lang: "ts", "const a = \\"b\\";\\n")
   line(length: 100%)

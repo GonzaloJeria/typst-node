@@ -6,3 +6,4 @@ coverage/
 packages/pdf/test/visual/__diff__/
 crates/*/target/
 npm/*/bin/
+packages/pdf/test/chrome/__report__/

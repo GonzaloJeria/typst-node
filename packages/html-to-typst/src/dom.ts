@@ -53,6 +53,12 @@ export function selectorElement(el: Element): SelectorElement {
         const siblings = p && "childNodes" in p ? p.childNodes.filter(isElement) : [el];
         return { index: siblings.indexOf(el) + 1, count: siblings.length };
       },
+      siblings: () => {
+        const p = el.parentNode;
+        return (p && "childNodes" in p ? p.childNodes.filter(isElement) : [el]).map(selectorElement);
+      },
+      children: () => childElements(el).map(selectorElement),
+      isEmpty: () => el.childNodes.every((n) => !isElement(n) && !(isText(n) && n.value.length > 0)),
     };
     adapters.set(el, a);
   }
