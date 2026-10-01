@@ -20,7 +20,12 @@ describe("values", () => {
   it("rejects unitless non-zero and garbage lengths", () => {
     expect(parseLength("12", ctx)).toBeUndefined();
     expect(parseLength("calc(1px + )", ctx)).toBeUndefined();
-    expect(parseLength("calc(10% + 2px)", ctx)).toBeUndefined();
+  });
+
+  it("keeps calc() mixing % and lengths as a relative length", () => {
+    expect(parseLength("calc(10% + 2px)", ctx)).toEqual({ value: 10, unit: "%", offset: 1.5 });
+    expect(parseLength("calc(100% - 2rem)", ctx)).toEqual({ value: 100, unit: "%", offset: -24 });
+    expect(parseLength("min(100%, 40rem)", ctx)).toBeUndefined();
   });
 
   it.each([

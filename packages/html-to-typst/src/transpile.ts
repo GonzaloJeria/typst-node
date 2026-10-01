@@ -3,7 +3,7 @@ import { Cascade } from "./css/cascade.js";
 import { parseStylesheet, type Declaration } from "./css/parse.js";
 import { expandBox, parseColor, parseFontSize, parseGradient, parseLength, splitValue, toPt, type LengthContext } from "./css/values.js";
 import type { MediaContext } from "./css/conditions.js";
-import { backgroundImage, Converter, lineGap, type ConvertOptions } from "./convert.js";
+import { backgroundImage, Converter, lineHeightOf, type ConvertOptions } from "./convert.js";
 import { expandShorthand } from "./css/cascade.js";
 import { attr, findAll, findFirst, isText } from "./dom.js";
 import { emitDocument } from "./emit.js";
@@ -41,7 +41,8 @@ export interface TranspileResult {
 export function htmlToTypst(html: string, options: TranspileOptions = {}): TranspileResult {
   const doc = parse(html);
   // Minimal user-agent defaults for presentational tags not mapped to IR nodes.
-  const sheet = parseStylesheet(UA_CSS);
+  // User-agent rules go in the first (weakest) cascade layer, below every author rule.
+  const sheet = parseStylesheet(`@layer user-agent { ${UA_CSS} }`);
   for (const style of findAll(doc, "style")) {
     parseStylesheet(style.childNodes.filter(isText).map((t) => t.value).join(""), sheet);
   }
@@ -64,8 +65,8 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
 
   converter.baseLineHeight = bodyStyle.props.get("line-height");
   const document: Document = { text, children: converter.blocks(body, bodyStyle) };
-  const leading = lineGap(converter.baseLineHeight, bodyStyle);
-  if (leading && converter.baseLineHeight && converter.baseLineHeight !== "normal") document.leading = leading;
+  const lineHeight = lineHeightOf(converter.baseLineHeight, bodyStyle);
+  if (lineHeight !== undefined && lineHeight !== "normal") document.lineHeight = lineHeight;
   const ctx = { fontSize: bodyStyle.fontSize, rootFontSize: cascade.rootFontSize };
   const page = pageSetup(sheet.page, ctx, converter.warnings) ?? {};
   // Paged media paints the canvas with the root/body background.
@@ -145,6 +146,7 @@ function resolveRuns(
     }
     if (b.kind === "list") b.items = b.items.map((i) => resolveRuns(i, false, setupOf, warnings));
     if (b.kind === "grid") b.cells = b.cells.map((c) => resolveRuns(c, false, setupOf, warnings));
+    if (b.kind === "flow") for (const item of b.items) item.children = resolveRuns(item.children, false, setupOf, warnings);
     if (b.kind === "table") {
       for (const rows of [b.header, b.body, b.footer]) {
         for (const row of rows ?? []) for (const cell of row.cells) cell.children = resolveRuns(cell.children, false, setupOf, warnings);
@@ -154,13 +156,19 @@ function resolveRuns(
   });
 }
 
+/** Browser defaults (Chrome's user-agent stylesheet) for what the converter does not hard-code. */
 const UA_CSS = `
-  h1 { font-size: 2em; font-weight: bold }
-  h2 { font-size: 1.5em; font-weight: bold }
-  h3 { font-size: 1.17em; font-weight: bold }
-  h4 { font-size: 1em; font-weight: bold }
-  h5 { font-size: 0.83em; font-weight: bold }
-  h6 { font-size: 0.67em; font-weight: bold }
+  h1 { font-size: 2em; font-weight: bold; margin: 0.67em 0 }
+  h2 { font-size: 1.5em; font-weight: bold; margin: 0.83em 0 }
+  h3 { font-size: 1.17em; font-weight: bold; margin: 1em 0 }
+  h4 { font-size: 1em; font-weight: bold; margin: 1.33em 0 }
+  h5 { font-size: 0.83em; font-weight: bold; margin: 1.67em 0 }
+  h6 { font-size: 0.67em; font-weight: bold; margin: 2.33em 0 }
+  p, ul, ol, dl, pre, figure { margin: 1em 0 }
+  ul, ol { padding-left: 40px }
+  li ul, li ol { margin: 0 }
+  blockquote { margin: 1em 40px }
+  hr { margin: 0.5em 0 }
   small { font-size: smaller }
   big { font-size: larger }
   mark { background-color: yellow }

@@ -68,10 +68,13 @@ function parseCalc(expr: string, ctx: LengthContext): Length | undefined {
   const q = evalCalc(expr, ctx);
   if (!q) return undefined;
   if (!q.dim) return q.n === 0 ? { value: 0, unit: "pt" } : undefined;
-  return { value: round4(q.n), unit: q.unit ?? "pt" };
+  if (q.pct === 0) return { value: round4(q.n), unit: "pt" };
+  if (Math.abs(q.n) < 1e-9) return { value: round4(q.pct), unit: "%" };
+  // Typst relative lengths combine both: `100% - 2rem` → `100% - 24pt`.
+  return { value: round4(q.pct), unit: "%", offset: round4(q.n) };
 }
 
-function evalCalc(expr: string, ctx: LengthContext): { n: number; dim: boolean; unit?: "pt" | "%" } | undefined {
+function evalCalc(expr: string, ctx: LengthContext): { n: number; pct: number; dim: boolean } | undefined {
   const tokens = expr.match(/[-+]?\d*\.?\d+(?:e[-+]?\d+)?[a-z%]*|[a-z-]+\(|[-+*/(),]/gi);
   if (!tokens || tokens.join("").length !== expr.replace(/\s+/g, "").length) return undefined;
   // A sign glued to a number after an operand is a binary operator (`1px -2px` is invalid CSS anyway).
@@ -82,12 +85,13 @@ function evalCalc(expr: string, ctx: LengthContext): { n: number; dim: boolean; 
     }
   }
   let pos = 0;
-  let unit: "pt" | "%" | undefined;
-  type Q = { n: number; dim: boolean };
+  // A number (dim: false) or a length `n pt + pct %` (dim: true).
+  type Q = { n: number; pct: number; dim: boolean };
   const fail = (): undefined => {
     pos = tokens.length + 1;
     return undefined;
   };
+  const scale = (q: Q, k: number): Q => ({ n: q.n * k, pct: q.pct * k, dim: q.dim });
   const args = (): Q[] | undefined => {
     const out: Q[] = [];
     for (;;) {
@@ -107,28 +111,30 @@ function evalCalc(expr: string, ctx: LengthContext): { n: number; dim: boolean; 
     }
     if (t === "-" || t === "+") {
       const q = primary();
-      return q && { n: t === "-" ? -q.n : q.n, dim: q.dim };
+      return q && (t === "-" ? scale(q, -1) : q);
     }
     const fn = t?.toLowerCase();
     if (fn === "min(" || fn === "max(" || fn === "clamp(") {
       const list = args();
       if (!list || !list.length || list.some((q) => q.dim !== list[0]!.dim)) return fail();
-      const ns = list.map((q) => q.n);
+      // Comparing % with absolute lengths needs the container size.
+      const percent = list.some((q) => q.pct !== 0);
+      if (percent && list.some((q) => q.n !== 0)) return fail();
+      const ns = list.map((q) => (percent ? q.pct : q.n));
+      let v: number;
       if (fn === "clamp(") {
         if (ns.length !== 3) return fail();
-        return { n: Math.max(ns[0]!, Math.min(ns[1]!, ns[2]!)), dim: list[0]!.dim };
-      }
-      return { n: fn === "min(" ? Math.min(...ns) : Math.max(...ns), dim: list[0]!.dim };
+        v = Math.max(ns[0]!, Math.min(ns[1]!, ns[2]!));
+      } else v = fn === "min(" ? Math.min(...ns) : Math.max(...ns);
+      return percent ? { n: 0, pct: v, dim: true } : { n: v, pct: 0, dim: list[0]!.dim };
     }
     if (t === undefined || !/^[-+]?\d*\.?\d+/.test(t)) return fail();
-    if (/^[-+]?\d*\.?\d+(?:e[-+]?\d+)?$/i.test(t)) return { n: Number(t), dim: false };
+    if (/^[-+]?\d*\.?\d+(?:e[-+]?\d+)?$/i.test(t)) return { n: Number(t), pct: 0, dim: false };
     const l = parseLength(t, ctx);
     if (!l) return fail();
-    const u = l.unit === "%" ? "%" : "pt";
-    if (unit && unit !== u) return fail(); // Mixing % with absolute lengths needs layout.
-    unit = u;
-    const n = u === "%" ? l.value : toPt(l);
-    return n === undefined ? fail() : { n, dim: true };
+    if (l.unit === "%") return { n: 0, pct: l.value, dim: true };
+    const n = toPt(l);
+    return n === undefined ? fail() : { n, pct: 0, dim: true };
   };
   const product = (): Q | undefined => {
     let a = primary();
@@ -136,7 +142,8 @@ function evalCalc(expr: string, ctx: LengthContext): { n: number; dim: boolean; 
       const op = tokens[pos++];
       const b = primary();
       if (!b || (a.dim && b.dim) || (op === "/" && (b.dim || b.n === 0))) return fail();
-      a = { n: op === "*" ? a.n * b.n : a.n / b.n, dim: a.dim || b.dim };
+      const [len, k] = a.dim ? [a, b.n] : [b, a.n];
+      a = op === "*" ? scale(len, k) : scale(a, 1 / b.n);
     }
     return a;
   };
@@ -147,14 +154,16 @@ function evalCalc(expr: string, ctx: LengthContext): { n: number; dim: boolean; 
       const b = product();
       if (!b) return fail();
       // A unitless zero mixes with lengths, as in `max(0, 1rem)`.
-      if (a.dim !== b.dim && !(a.n === 0 && !a.dim) && !(b.n === 0 && !b.dim)) return fail();
-      a = { n: op === "+" ? a.n + b.n : a.n - b.n, dim: a.dim || b.dim };
+      const zero = (q: Q) => !q.dim && q.n === 0;
+      if (a.dim !== b.dim && !zero(a) && !zero(b)) return fail();
+      const sign = op === "+" ? 1 : -1;
+      a = { n: a.n + sign * b.n, pct: a.pct + sign * b.pct, dim: a.dim || b.dim };
     }
     return a;
   };
   const q = sum();
   if (!q || pos !== tokens.length) return undefined;
-  return unit ? { ...q, unit } : q;
+  return q;
 }
 
 function round4(n: number): number {

@@ -34,24 +34,22 @@ describe("horizontal margins", () => {
 
 describe("line-height", () => {
   it.each([
-    ["1.5", { value: 0.5, unit: "em" }],
-    ["150%", { value: 0.5, unit: "em" }],
-    ["2em", { value: 12, unit: "pt" }],
-    ["18px", { value: 1.5, unit: "pt" }],
-    ["1", { value: 0, unit: "em" }],
-  ])("maps %s to the gap between lines", (value, leading) => {
-    expect(blocks(`<p style="line-height: ${value}">x</p>`)[0]).toMatchObject({ leading });
+    ["1.5", 1.5],
+    ["150%", 1.5],
+    ["2em", 2],
+    ["18px", 1.13],
+    ["1", 1],
+  ])("maps %s to a multiple of the font size", (value, lineHeight) => {
+    expect(blocks(`<p style="line-height: ${value}">x</p>`)[0]).toMatchObject({ lineHeight });
   });
 
   it("sets the document default from body and only overrides differences", () => {
     const r = doc('<p>a</p><p class="loose">b</p><div class="loose"><p>c</p></div>', "body { line-height: 1.4 } .loose { line-height: 2 }");
-    expect(r.document.leading).toEqual({ value: 0.4, unit: "em" });
+    expect(r.document.lineHeight).toBe(1.4);
     // The nested paragraph inherits line-height from its div.
-    expect(r.document.children.map((b) => (b as { leading?: unknown }).leading)).toEqual([
-      undefined,
-      { value: 1, unit: "em" },
-      { value: 1, unit: "em" },
-    ]);
-    expect(r.source).toContain("#set par(leading: 0.4em)");
+    expect(r.document.children.map((b) => (b as { lineHeight?: unknown }).lineHeight)).toEqual([undefined, 2, 2]);
+    expect(r.source).toContain("#show: css-line-height.with(1.4)");
+    expect(r.source).toContain("css-line-height(2, par(");
   });
 });
+

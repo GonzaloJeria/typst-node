@@ -253,7 +253,19 @@ variables), anidado de reglas (`&`), selectores nivel 4 (`:is()`, `:where()`,
 `ch`/`ex`/`lh`, propiedades lógicas (`padding-inline`, `margin-block-start`,
 `inset-inline`…), el shorthand `font`, `box-sizing` en anchos y altos,
 `grid-template-columns` con `repeat()` y `minmax()`, y texto suelto dentro de
-flex/grid. Estados interactivos (`:hover`, `:focus`…) nunca aplican en papel y
+flex/grid.
+
+**Layout como en el navegador:** `line-height` arma cajas de línea como CSS
+(el espacio extra se reparte arriba y abajo de cada línea, según las métricas
+de la fuente); los bloques se separan solo por sus márgenes, que colapsan
+entre hermanos (también los negativos) y se conservan al inicio de la página y
+dentro de ítems flex/grid; márgenes por defecto del navegador para `h1`–`h6`,
+`p`, listas y `blockquote`; viñetas y números colgando en el `padding` de la
+lista; `flex-wrap: wrap` (ítems en `%` se reparten en filas, como la grilla
+`.row`/`.col-*` de Bootstrap; los demás fluyen y saltan de línea, como
+etiquetas o chips); `flex-direction: column` con `align-items` y `gap`;
+`row-gap`/`column-gap`; `calc()` que mezcla `%` con longitudes
+(`calc(100% - 2rem)`). Estados interactivos (`:hover`, `:focus`…) nunca aplican en papel y
 no generan warnings. Si un valor no se puede renderizar y la regla traía un
 fallback (`display: block; display: -webkit-box`), se usa el fallback.
 
@@ -289,9 +301,8 @@ fluye columna a columna entre páginas). Ideal para términos y condiciones.
 inline, combinables con `auto`) y `line-height` (número, %, longitud;
 `normal` ≈ 1.2).
 
-**Todavía no:** `flex-wrap` (la grilla `.row` de Bootstrap funciona mientras
-los `.col-*` quepan en una fila), `flex-direction: column` con alineación,
-`calc()` que mezcla `%` con longitudes, `@container`, `@font-face`, `float`, fondos repetidos (`repeat`) o con varias capas, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
+**Todavía no:** `justify-content` en columnas flex, `min()`/`max()` que
+comparan `%` con longitudes, `@container`, `@font-face`, `float`, fondos repetidos (`repeat`) o con varias capas, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
 márgenes o tamaño distintos en `@page :first`, `@page :left/:right`,
 `@page nombre:first`, `column-width`, `column-rule`, `column-span`.
 
@@ -328,8 +339,10 @@ dibujo de cada letra.
 - Las imágenes lado a lado (Chrome | librería | diferencia) y los warnings quedan en `test/chrome/__report__/`.
 - No corre en CI (necesita Chromium); se salta sola si no lo encuentra (`CHROMIUM_PATH` para indicar la ruta).
 
-| Plantilla | Antes | Ahora |
+| Plantilla | 0.1.1 | Ahora |
 | --- | --- | --- |
-| Bootstrap 5 (reporte) | 58,7 % | 74,4 % |
-| CSS moderno | 75,6 % | 80,4 % |
-| Tailwind v4 (factura) | 81,8 % | 86,6 % |
+| Tailwind v4 (factura) | 81,8 % | 98,4 % |
+| HTML simple, sin framework | 72,8 % | 94,8 % |
+| CSS moderno (capas, anidado, `oklch`) | 75,6 % | 90,0 % |
+| Bootstrap 5 (reporte) | 67,5 % | 84,4 % |
+| Flex con `wrap`, columnas y `calc()` | 49,4 % | 82,1 % |

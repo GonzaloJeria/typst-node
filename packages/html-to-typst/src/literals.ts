@@ -30,6 +30,7 @@ export function num(n: number): string {
 }
 
 export function length(l: Length): string {
+  if (l.offset) return `(${num(l.value)}${l.unit} ${l.offset < 0 ? "-" : "+"} ${num(Math.abs(l.offset))}pt)`;
   return `${num(l.value)}${l.unit}`;
 }
 
