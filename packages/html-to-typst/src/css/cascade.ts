@@ -318,13 +318,16 @@ export function expandShorthand(property: string, rawValue: string): [string, st
   }
   const radius = /^border-(top|bottom)-(left|right)-radius$/.exec(property);
   if (radius) return [[property, value]];
-  if (property === "border-radius" && /^(?:initial|inherit|unset)$/.test(value)) return [[property, value]];
   if (property === "border-radius") {
-    // Corners may differ; one value for all four is what Typst's `radius` takes uniformly.
-    const [h] = value.split("/");
-    const box = expandBox(splitValue(h!.trim()));
-    if (!box) return [[property, value]];
-    return box.every((v) => v === box[0]) ? [[property, box[0]!]] : [[property, value]];
+    // Elliptical radii (`a / b`) keep only the horizontal ones.
+    const corners = ["top-left", "top-right", "bottom-right", "bottom-left"];
+    if (/^(?:initial|inherit|unset)$/.test(value)) return corners.map((c) => [`border-${c}-radius`, value]);
+    const box = expandBox(splitValue(value.split("/")[0]!.trim()));
+    return box ? corners.map((c, i) => [`border-${c}-radius`, box[i]!]) : [[property, value]];
+  }
+  if (property === "overflow") {
+    const [x, y = x] = splitValue(value);
+    return [["overflow-x", x!], ["overflow-y", y!]];
   }
   if (property === "list-style") {
     const tokens = splitValue(value);

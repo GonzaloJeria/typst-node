@@ -11,6 +11,7 @@ import {
   type TypstBackend,
 } from "@gjeria/typst-compiler";
 import { fileURLToPath } from "node:url";
+import { resolveFonts } from "./fonts.js";
 import { resolveAssets, type AssetOptions } from "./assets.js";
 
 /**
@@ -46,6 +47,8 @@ export interface PagesResult extends Omit<PdfResult, "pdf"> {
 interface Prepared {
   source: string;
   files: Map<string, Uint8Array>;
+  /** `@font-face` fonts loaded for this document. */
+  fonts: Uint8Array[];
   warnings: string[];
 }
 
@@ -87,7 +90,7 @@ export class PdfRenderer {
     const result = await this.backend.compile({
       source: prepared.source,
       files: prepared.files,
-      ...compileExtras(opts),
+      ...compileExtras(opts, prepared.fonts),
     });
     return { pdf: result.pdf, warnings: prepared.warnings, diagnostics: result.warnings, source: prepared.source };
   }
@@ -100,7 +103,7 @@ export class PdfRenderer {
       files: prepared.files,
       format: options.format ?? "png",
       ...(options.ppi ? { ppi: options.ppi } : {}),
-      ...compileExtras(opts),
+      ...compileExtras(opts, prepared.fonts),
     });
     return { pages: result.pages, warnings: prepared.warnings, diagnostics: result.warnings, source: prepared.source };
   }
@@ -137,7 +140,11 @@ function defaultBackend(options: PdfRendererOptions): TypstBackend {
 }
 
 async function prepare(input: RenderInput, opts: RenderOptions): Promise<Prepared> {
-  const transpiled = typeof input === "string" ? htmlToTypst(input, opts) : composeToTypst(input, opts);
+  const transpile = (o: RenderOptions) => (typeof input === "string" ? htmlToTypst(input, o) : composeToTypst(input, o));
+  let transpiled = transpile(opts);
+  const fonts = await resolveFonts(transpiled.fontFaces, opts.assets, opts.signal);
+  // Families named differently in CSS than in the font file: convert again with aliases.
+  if (Object.keys(fonts.aliases).length) transpiled = transpile({ ...opts, fontAliases: { ...fonts.aliases, ...opts.fontAliases } });
   const assets = await resolveAssets(transpiled.assets, opts.assets, opts.signal);
   mapImages(transpiled.document, (src) => {
     const mapped = assets.mapping.get(src);
@@ -147,13 +154,15 @@ async function prepare(input: RenderInput, opts: RenderOptions): Promise<Prepare
   return {
     source: emitDocument(transpiled.document),
     files: assets.files,
-    warnings: [...transpiled.warnings, ...assets.warnings],
+    fonts: fonts.fonts,
+    warnings: [...transpiled.warnings, ...fonts.warnings, ...assets.warnings],
   };
 }
 
-function compileExtras(opts: RenderOptions) {
+function compileExtras(opts: RenderOptions, documentFonts: Uint8Array[] = []) {
+  const fonts = [...(opts.fonts ?? []), ...documentFonts];
   return {
-    ...(opts.fonts?.length ? { fonts: opts.fonts } : {}),
+    ...(fonts.length ? { fonts } : {}),
     ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
     ...(opts.signal ? { signal: opts.signal } : {}),
   };

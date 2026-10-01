@@ -36,6 +36,8 @@ export interface Stylesheet {
   layers: string[];
   /** Custom properties registered with `@property`. */
   properties: Record<string, RegisteredProperty>;
+  /** `@font-face` rules: a family name and its `src` URLs with their formats. */
+  fontFaces: { family: string; sources: { url: string; format?: string }[] }[];
   warnings: string[];
 }
 
@@ -45,7 +47,7 @@ export interface PageRule {
 }
 
 export function emptyStylesheet(): Stylesheet {
-  return { rules: [], page: [], pageBoxes: {}, namedPages: {}, layers: [], properties: {}, warnings: [] };
+  return { rules: [], page: [], pageBoxes: {}, namedPages: {}, layers: [], properties: {}, fontFaces: [], warnings: [] };
 }
 
 export function parseDeclarations(text: string): Declaration[] {
@@ -165,6 +167,20 @@ function atRule(prelude: string, body: string, into: Stylesheet, ctx: Context): 
       const initial = decls.get("initial-value");
       if (initial !== undefined) registered.initial = initial;
       into.properties[rest] = registered;
+      return;
+    }
+    case "font-face": {
+      const decls = new Map(parseDeclarations(body).map((d) => [d.property.toLowerCase(), d.value]));
+      const family = decls.get("font-family")?.trim().replace(/^(["'])(.*)\1$/, "$2");
+      const src = decls.get("src");
+      if (!family || !src) return;
+      const sources = splitTopLevel(src, ",").flatMap((part) => {
+        const url = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s]*))\s*\)/i.exec(part);
+        if (!url) return [];
+        const format = /format\(\s*["']?([-\w]+)["']?\s*\)/i.exec(part)?.[1]?.toLowerCase();
+        return [{ url: (url[1] ?? url[2] ?? url[3])!, ...(format ? { format } : {}) }];
+      });
+      if (sources.length) into.fontFaces.push({ family, sources });
       return;
     }
     case "container":

@@ -82,7 +82,7 @@ export async function resolveAssets(
   return { files, mapping, warnings };
 }
 
-async function loadOne(src: string, o: AssetOptions, signal?: AbortSignal): Promise<Uint8Array> {
+export async function loadOne(src: string, o: AssetOptions, signal?: AbortSignal): Promise<Uint8Array> {
   const custom = await o.resolve?.(src);
   if (custom) return custom;
 

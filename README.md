@@ -179,6 +179,21 @@ Serif y `monospace` DejaVu Sans Mono, que vienen dentro de Typst. Un
 renderer agrega las fuentes solo; si creas tu propio backend, pásale
 `fonts: [{ dir: bundledFontsDir }]`, y con `bundledFonts: false` las desactivas.
 
+Tus propias fuentes se declaran en el CSS con `@font-face`, como en el
+navegador:
+
+```css
+@font-face { font-family: Marca; src: url(fonts/Marca-Regular.ttf) format("truetype") }
+body { font-family: Marca, sans-serif }
+```
+
+El archivo se carga con las mismas reglas que las imágenes (`assets.baseDir`,
+`data:` o `allowRemote`), y si el nombre del CSS (`Marca`) no coincide con el
+nombre de la familia dentro del archivo, la librería lo traduce sola. Typst
+solo lee **TTF y OTF**: una fuente que solo está en WOFF/WOFF2 se ignora con un
+warning (si el `src` ofrece varias, se usa la TTF/OTF). Cada `@font-face` aporta
+un archivo; para negrita y cursiva declara los cuatro con el mismo nombre.
+
 ### Memoria y costo (Cloud Run)
 
 Medido en Linux x64 con el binario publicado (musl estático + jemalloc),
@@ -233,7 +248,8 @@ publicarse sin su binario.
 (`var()` con fallback, `:root`); `calc()` simple; colores hex/rgb/hsl con
 transparencia; `opacity` (aproximada: se aplica al texto, al fondo y al borde
 del elemento); fondos con color o `linear-gradient`/`radial-gradient`; padding,
-bordes (sólidos, `dashed`, `dotted`) y `border-radius`, también en elementos
+bordes (sólidos, `dashed`, `dotted`) y `border-radius` (también distinto por
+esquina, como `rounded-t-lg`), también en elementos
 inline (badges, chips); `text-transform`; `::before`/`::after` con `content`
 (strings con escapes, `attr()`, comillas); `list-style` (marcadores, numeración
 alfabética y romana, `none`); tablas con rowspan/colspan; flex en fila (con `justify-content` y
@@ -290,7 +306,10 @@ cajas de margen distintas en la primera página.
 **Cajas:** `height` y `min-height` (longitudes o `%`, respetando
 `box-sizing`); imágenes de fondo con `background-image: url()` o el shorthand
 `background` (`cover`, `contain`, `100% 100%` o un tamaño, posición con
-palabras clave, `no-repeat`), recortadas al `border-radius`. `@page { background: url(…) }` pinta una imagen
+palabras clave, `no-repeat`), recortadas al `border-radius`. `overflow: hidden`
+(o `clip`, `auto`, `scroll`: en papel no hay scroll) recorta el contenido a la
+caja y a sus esquinas redondeadas. Imágenes con ancho y alto respetan
+`object-fit` (`fill` por defecto, `cover`, `contain`). `@page { background: url(…) }` pinta una imagen
 detrás de cada página (marcas de agua, membretes).
 
 **Columnas:** `column-count`, `columns: N` y `column-gap`, con columnas
@@ -302,7 +321,7 @@ inline, combinables con `auto`) y `line-height` (número, %, longitud;
 `normal` ≈ 1.2).
 
 **Todavía no:** `justify-content` en columnas flex, `min()`/`max()` que
-comparan `%` con longitudes, `@container`, `@font-face`, `float`, fondos repetidos (`repeat`) o con varias capas, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
+comparan `%` con longitudes, `@container`, fuentes WOFF/WOFF2, `float`, fondos repetidos (`repeat`) o con varias capas, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
 márgenes o tamaño distintos en `@page :first`, `@page :left/:right`,
 `@page nombre:first`, `column-width`, `column-rule`, `column-span`.
 
@@ -346,3 +365,4 @@ dibujo de cada letra.
 | CSS moderno (capas, anidado, `oklch`) | 75,6 % | 90,0 % |
 | Bootstrap 5 (reporte) | 67,5 % | 84,4 % |
 | Flex con `wrap`, columnas y `calc()` | 49,4 % | 82,1 % |
+| Efectos (esquinas, `overflow`, `object-fit`, sombras) | — | 76,7 % |

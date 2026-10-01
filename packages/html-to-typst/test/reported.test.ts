@@ -29,7 +29,7 @@ describe("inline SVG", () => {
 
   it("becomes an SVG image with its size", () => {
     const { source, warnings } = htmlToTypst(`<p style="color:#ff0000">Firma: ${svg}</p>`);
-    const uri = /image\(width: 30pt, height: 15pt, "data:image\/svg\+xml;base64,([^"]+)"\)/.exec(source);
+    const uri = /image\(width: 30pt, height: 15pt, fit: "contain", "data:image\/svg\+xml;base64,([^"]+)"\)/.exec(source);
     expect(uri).not.toBeNull();
     const markup = Buffer.from(uri![1]!, "base64").toString("utf8");
     expect(markup).toMatch(/^<svg xmlns="http:\/\/www.w3.org\/2000\/svg"/);

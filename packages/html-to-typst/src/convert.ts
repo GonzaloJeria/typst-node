@@ -4,12 +4,17 @@ import { checkDeclaration } from "./css/support.js";
 import { overColor, parseColor, parseGradient, parseInsetFill, parseLength, parseShadows, parseTransform, parseUrl, splitValue, toPt, withAlpha, type LengthContext } from "./css/values.js";
 import { attr, isElement, isText, type Element, type Node, type TextNode } from "./dom.js";
 import type {
-  BackgroundImage, Block, BoxStyle, Color, HAlign, Inline, InlineBoxStyle, Length, LineHeight, Margins, Paint, Sides, Size, Stroke, TableCell, TableRow, TextStyle, TransformOp, VAlign,
+  BackgroundImage, Block, BoxStyle, Color, HAlign, Corners, ImageFit, Inline, InlineBoxStyle, Length, LineHeight, Margins, Radius, Paint, Sides, Size, Stroke, TableCell, TableRow, TextStyle, TransformOp, VAlign,
 } from "./ir.js";
 
 export interface ConvertOptions {
   /** Font stacks for CSS generic families. Unmapped generics are dropped. */
   genericFamilies?: Partial<Record<"serif" | "sans-serif" | "monospace" | "cursive" | "fantasy" | "system-ui", string[]>>;
+  /**
+   * Font family names to use instead of CSS ones (case-insensitive keys),
+   * e.g. when an `@font-face` name differs from the name inside the font file.
+   */
+  fontAliases?: Record<string, string>;
 }
 
 const DEFAULT_GENERICS: NonNullable<ConvertOptions["genericFamilies"]> = {
@@ -34,6 +39,7 @@ export class Converter {
   readonly warnings = new Set<string>();
   readonly #generics: NonNullable<ConvertOptions["genericFamilies"]>;
   readonly #styles = new WeakMap<Element, ComputedStyle>();
+  readonly #aliases = new Map<string, string>();
   /** `position: fixed` content, repeated on every page. */
   readonly foreground: Block[] = [];
   /** `position: running(name)` elements, for `@page` margin boxes. */
@@ -41,6 +47,7 @@ export class Converter {
 
   constructor(readonly cascade: Cascade, options: ConvertOptions = {}) {
     this.#generics = { ...DEFAULT_GENERICS, ...options.genericFamilies };
+    for (const [k, v] of Object.entries(options.fontAliases ?? {})) this.#aliases.set(k.toLowerCase(), v);
     for (const w of cascade.warnings) this.warnings.add(w);
   }
 
@@ -297,8 +304,11 @@ export class Converter {
     if (fill) box.fill = fill;
     const stroke = sides((side) => borderStroke(p, side, ctx, opacity));
     if (stroke) box.stroke = stroke;
-    const radius = positive(parseLength(p.get("border-radius") ?? "", ctx));
+    const radius = radiusOf(p, ctx);
     if (radius) box.radius = radius;
+    // Paper has no scrolling: anything but `visible` clips, as Chrome prints it.
+    const clipped = (v: string | undefined) => !!v && v !== "visible";
+    if (clipped(p.get("overflow-x")) || clipped(p.get("overflow-y"))) box.clip = true;
     const above = parseLength(p.get("margin-top") ?? "", ctx);
     if (above && above.unit !== "%") box.above = above;
     const below = parseLength(p.get("margin-bottom") ?? "", ctx);
@@ -606,7 +616,7 @@ export class Converter {
     if (fill) box.fill = fill;
     const stroke = sides((side) => borderStroke(s.props, side, ctx, opacity, p));
     if (stroke) box.stroke = stroke;
-    const radius = positive(parseLength(p.get("border-radius") ?? "", ctx));
+    const radius = radiusOf(p, ctx);
     if (radius) box.radius = radius;
     const pad = (side: "top" | "right" | "bottom" | "left") => positive(parseLength(p.get(`padding-${side}`) ?? "", ctx));
     const inset = sides((side) => (side === "left" || side === "right" ? pad(side) : undefined));
@@ -641,7 +651,11 @@ export class Converter {
     const width = dim("width");
     const height = dim("height");
     const alt = attr(el, "alt");
-    return { kind: "image", src, ...(width ? { width } : {}), ...(height ? { height } : {}), ...(alt ? { alt } : {}) };
+    // With both sizes, CSS stretches the image (`object-fit: fill`); Typst would crop it.
+    const fit: ImageFit | undefined =
+      width && height && el.tagName === "svg" ? "contain" // preserveAspectRatio's default ("meet")
+      : width && height ? (({ cover: "cover", contain: "contain", "scale-down": "contain", none: "contain" } as const)[style.props.get("object-fit") ?? ""] ?? "stretch") : undefined;
+    return { kind: "image", src, ...(width ? { width } : {}), ...(height ? { height } : {}), ...(alt ? { alt } : {}), ...(fit ? { fit } : {}) };
   }
 
   // ── Tables ────────────────────────────────────────────────────────────────
@@ -816,6 +830,7 @@ export class Converter {
       if (!name) continue;
       const generic = this.#generics[name.toLowerCase() as keyof typeof DEFAULT_GENERICS];
       if (generic) out.push(...generic);
+      else if (this.#aliases.has(name.toLowerCase())) out.push(this.#aliases.get(name.toLowerCase())!);
       else if (!/^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-[a-z-]+|-apple-system|blinkmacsystemfont)$/i.test(name)) out.push(name);
     }
     return [...new Set(out)];
@@ -1181,6 +1196,21 @@ export function backgroundImage(p: ReadonlyMap<string, string>, ctx: LengthConte
   const x = pos.find((t) => t === "left" || t === "right") ?? (pos.includes("center") || pos.length === 1 ? "center" : "left");
   const y = pos.find((t) => t === "top" || t === "bottom") ?? (pos.includes("center") || pos.length === 1 ? "horizon" : "top");
   return { src, fit, align: { x, y: y as VAlign } };
+}
+
+/** Corner radii; one length when all four are equal. */
+function radiusOf(p: ReadonlyMap<string, string>, ctx: LengthContext): Radius | undefined {
+  const corner = (c: string) => positive(parseLength(splitValue(p.get(`border-${c}-radius`) ?? "")[0] ?? "", ctx));
+  const [topLeft, topRight, bottomRight, bottomLeft] = ["top-left", "top-right", "bottom-right", "bottom-left"].map(corner);
+  const all = [topLeft, topRight, bottomRight, bottomLeft];
+  if (all.every((c) => !c)) return undefined;
+  if (all.every((c) => JSON.stringify(c) === JSON.stringify(topLeft))) return topLeft;
+  const out: Corners = {};
+  if (topLeft) out.topLeft = topLeft;
+  if (topRight) out.topRight = topRight;
+  if (bottomRight) out.bottomRight = bottomRight;
+  if (bottomLeft) out.bottomLeft = bottomLeft;
+  return out;
 }
 
 function backgroundOf(p: ReadonlyMap<string, string>, opacity: number): Paint | undefined {

@@ -83,7 +83,9 @@ export interface BoxStyle {
   inset?: Sides<Length>;
   fill?: Paint;
   stroke?: Sides<Stroke>;
-  radius?: Length;
+  radius?: Radius;
+  /** `overflow: hidden`: content is clipped to the box. */
+  clip?: boolean;
   /** Space above/below — margins already collapsed by the front-end. */
   above?: Length;
   below?: Length;
@@ -93,6 +95,18 @@ export interface BoxStyle {
   /** Outer shadows, painted behind the box (makes it unbreakable). */
   shadows?: Shadow[];
 }
+
+/** How an image fills a box with both width and height (CSS `object-fit`). */
+export type ImageFit = "cover" | "contain" | "stretch";
+
+/** Per-corner radii (`border-top-left-radius`…), when they differ. */
+export interface Corners {
+  topLeft?: Length;
+  topRight?: Length;
+  bottomRight?: Length;
+  bottomLeft?: Length;
+}
+export type Radius = Length | Corners;
 
 export interface BackgroundImage {
   src: string;
@@ -109,7 +123,7 @@ export interface InlineBoxStyle {
   outset?: Sides<Length>;
   fill?: Paint;
   stroke?: Sides<Stroke>;
-  radius?: Length;
+  radius?: Radius;
 }
 
 // ── Inline ──────────────────────────────────────────────────────────────────
@@ -129,7 +143,7 @@ export type Inline =
   /** Horizontal space, from inline margins. */
   | { kind: "space"; width: Length }
   | { kind: "linebreak" }
-  | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string }
+  | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string; fit?: ImageFit }
   /** `position: relative` offset of inline content: painted shifted, laid out in place. */
   | { kind: "move"; dx: Length; dy: Length; children: Inline[] }
   /** Current page number or total page count (headers and footers). */
@@ -226,7 +240,7 @@ export type Block =
   | { kind: "raw-block"; value: string; lang?: string; margins?: Margins }
   | { kind: "rule"; margins?: Margins }
   | { kind: "pagebreak"; weak?: boolean }
-  | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string }
+  | { kind: "image"; src: string; width?: Size; height?: Size; alt?: string; fit?: ImageFit }
   /**
    * Out-of-flow content (`position: absolute`) anchored to a corner of the
    * containing block; offsets point inwards from that corner.
