@@ -77,12 +77,12 @@ describe("flex align-items", () => {
 
 describe("text-align on headings", () => {
   it("aligns a heading", () => {
-    expect(htmlToTypst(`<h1 style="text-align:center">T</h1>`).source).toContain('align(center, heading(level: 1, "T"))');
+    expect(htmlToTypst(`<h1 style="text-align:center">T</h1>`).source).toContain('align(center, heading(level: 1, text(size: 24pt, weight: "bold", "T")))');
   });
 
   it("inherits the alignment and survives the heading's own margin", () => {
     const { source } = htmlToTypst(`<div style="text-align:right"><h2 style="margin:0 0 10px">T</h2></div>`);
     // Full width, so the margin's auto-width block cannot shrink it.
-    expect(source).toContain('block(width: 100%, align(right, heading(level: 2, "T")))');
+    expect(source).toContain('block(width: 100%, align(right, heading(level: 2, text(size: 18pt, weight: "bold", "T"))))');
   });
 });

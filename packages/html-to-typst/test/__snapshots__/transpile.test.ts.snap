@@ -4,10 +4,11 @@ exports[`official compiler > matches the invoice snapshot 1`] = `
 "#set page(paper: "a4", margin: (top: 18mm, right: 15mm, bottom: 18mm, left: 15mm))
 #set text(font: ("Libertinus Serif",), size: 10pt, fill: rgb("#222222"), lang: "es", top-edge: "ascender", bottom-edge: "descender")
 #set par(leading: 0.2em)
+#show heading: it => it.body
 #{
-  text(fill: rgb("#0a3d62"), block(below: 3pt, heading(level: 1, {
+  block(below: 3pt, heading(level: 1, text(size: 20pt, weight: "bold", fill: rgb("#0a3d62"), {
     "Factura N° 2026-001 "
-    text(size: 8.33pt, "(borrador)")
+    text(size: 16.67pt, "(borrador)")
   })))
   grid(columns: (1fr, 1fr), gutter: 9pt, block(width: 100%, inset: 6pt, stroke: 0.75pt + rgb("#cccccc"), radius: 3pt, breakable: false, par({
     strong("Emisor")
@@ -31,7 +32,7 @@ exports[`official compiler > matches the invoice snapshot 1`] = `
   }))
   pagebreak(weak: true)
   text(size: 8pt, {
-    heading(level: 2, "Términos")
+    heading(level: 2, text(size: 12pt, weight: "bold", "Términos"))
     par(justify: true, "Lorem ipsum \\\\ dolor // sit @amet <label>.")
   })
 }

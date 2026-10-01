@@ -81,7 +81,11 @@ describe("parser", () => {
       @media print { p { color: green } }
       @font-face { font-family: X }
     `);
-    expect(sheet.rules.map((r) => r.selectors)).toEqual([["h1", ".a > b"], ["p"]]);
+    expect(sheet.rules.map((r) => [r.selectors, r.media])).toEqual([
+      [["h1", ".a > b"], undefined],
+      [["p"], ["screen"]],
+      [["p"], ["print"]],
+    ]);
     expect(sheet.rules[0]!.declarations[0]).toEqual({ property: "color", value: "red", important: true });
     expect(sheet.page.map((d) => d.property)).toEqual(["size", "margin"]);
   });
@@ -131,7 +135,11 @@ describe("selectors", () => {
     expect(matches(parseSelector(":root")!, td)).toBe(false);
   });
 
-  it.each(["a + b", "a ~ b", "a:hover", "a::marker", "a:not(.b)"])("rejects unsupported %s", (sel) => {
+  it.each(["a:unknown", "a:has-text(x)", "a <> b", "a::before b"])("rejects unsupported %s", (sel) => {
     expect(parseSelector(sel)).toBeUndefined();
+  });
+
+  it("never matches interactive states", () => {
+    expect(matches(parseSelector("td:hover")!, td)).toBe(false);
   });
 });

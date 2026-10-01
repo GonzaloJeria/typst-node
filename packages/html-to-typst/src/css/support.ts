@@ -1,4 +1,4 @@
-import { parseUrl, splitValue, parseColor, parseFontSize, parseGradient, parseLength, parseShadows, parseTransform } from "./values.js";
+import { parseInsetFill, parseUrl, splitValue, parseColor, parseFontSize, parseGradient, parseLength, parseShadows, parseTransform } from "./values.js";
 
 /**
  * Every CSS property the converter understands, with a validator for the
@@ -57,7 +57,14 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   "margin-right": (v) => v === "auto" || isLength(v),
   "border-radius": isLength,
   "border-collapse": oneOf("collapse"),
-  "box-sizing": oneOf("border-box"),
+  "box-sizing": oneOf("border-box", "content-box"),
+  "text-indent": (v) => /^0(?:[a-z]+|%)?$/.test(v.trim()),
+  "font-feature-settings": oneOf("normal"),
+  "font-variation-settings": oneOf("normal"),
+  "font-variant": oneOf("normal"),
+  "outline": oneOf("none", "0"),
+  "outline-style": oneOf("none"),
+  "outline-width": oneOf("0", "0px"),
   "break-before": oneOf("auto", "page", "always", "left", "right", "avoid"),
   "break-after": oneOf("auto", "page", "always", "left", "right", "avoid"),
   page: (v) => /^(?:auto|-?[_a-zA-Z][-\w]*)$/.test(v),
@@ -88,7 +95,7 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   left: (v) => v === "auto" || isAbsolute(v),
   transform: (v) => parseTransform(v, ctx) !== undefined,
   "transform-origin": oneOf("center", "50% 50%", "center center"),
-  "box-shadow": (v) => parseShadows(v, ctx) !== undefined,
+  "box-shadow": (v) => parseShadows(v, ctx) !== undefined || parseInsetFill(v) !== undefined,
 };
 
 export const LIST_STYLES = new Set([
@@ -97,7 +104,14 @@ export const LIST_STYLES = new Set([
 ]);
 
 /** Properties with no visual effect on paper: ignored without a warning. */
-const QUIET = /^(?:-(?:webkit|moz|ms|o)-|cursor$|pointer-events$|user-select$|transition|animation|will-change$|scroll-|touch-action$|resize$|caret-color$|outline-offset$)/;
+const QUIET = /^(?:-(?:webkit|moz|ms|o)-|cursor$|pointer-events$|user-select$|transition|animation|will-change$|scroll-|touch-action$|resize$|caret-color$|outline-offset$|outline-color$|appearance$|tab-size$|text-size-adjust$|text-rendering$|font-smooth|font-synthesis|font-kerning$|font-optical-sizing$|accent-color$|color-scheme$|print-color-adjust$|color-adjust$|content-visibility$|contain|isolation$|backface-visibility$|perspective|overscroll-behavior|forced-color-adjust$|speak|interpolate-size$|field-sizing$|text-wrap|text-underline-offset$|text-decoration-thickness$|text-decoration-color$|text-decoration-style$)/;
+
+/** Whether a value is valid for a property this converter knows; undefined for unknown properties. */
+export function isValidValue(property: string, value: string): boolean | undefined {
+  if (value === "inherit" || value === "initial" || value === "unset" || value === "revert" || value === "revert-layer") return true;
+  const validate = SUPPORTED[property];
+  return validate ? validate(value.trim()) : undefined;
+}
 
 /** Returns a warning for `property: value`, or undefined when it is supported. */
 export function checkDeclaration(property: string, value: string, where: string): string | undefined {

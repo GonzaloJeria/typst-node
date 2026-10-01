@@ -74,6 +74,8 @@ export interface BoxStyle {
   minHeight?: Length;
   /** `box-sizing: border-box`: heights already include the padding. */
   borderBox?: boolean;
+  /** `width` is a CSS content-box width: horizontal padding is added. */
+  contentWidth?: boolean;
   /** `background-image: url()`, painted over the fill and under the content. */
   image?: BackgroundImage;
   inset?: Sides<Length>;
@@ -161,7 +163,7 @@ export type Block =
   | PageRun
   /** CSS multi-column layout (`column-count`). */
   | { kind: "columns"; count: number; gutter?: Length; children: Block[] }
-  | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[]; align?: HAlign }
+  | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[]; align?: HAlign; style?: TextStyle }
   | {
       kind: "list";
       ordered: boolean;

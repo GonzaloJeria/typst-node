@@ -19,6 +19,9 @@ export function emitDocument(doc: Document): string {
   };
   lines.push("#" + call("set text", text));
   lines.push("#" + call("set par", { leading: doc.leading ? length(doc.leading) : LINE_GAP }));
+  // Headings keep their element (for the PDF outline) but take size and
+  // weight from CSS, like any other block.
+  lines.push("#show heading: it => it.body");
   lines.push(`#${seq(doc.children.map(emitBlock))}`);
   return lines.join("\n") + "\n";
 }
@@ -185,7 +188,8 @@ export function emitBlock(node: Block): string {
       return node.align ? `align(${align(node.align)}, ${body})` : body;
     }
     case "heading": {
-      const body = call("heading", { level: String(node.level) }, inlines(node.children));
+      const content = inlines(node.children);
+      const body = call("heading", { level: String(node.level) }, node.style ? call("text", textArgs(node.style), content) : content);
       // Full width, so an enclosing auto-width block cannot shrink it to its text.
       return node.align ? `block(width: 100%, align(${align(node.align)}, ${body}))` : body;
     }
@@ -322,6 +326,8 @@ function boxBlock(s: BoxStyle, children: Block[]): string {
   const outer = (l: Length) => (s.borderBox || !vpad.length ? length(l) : [length(l), ...vpad].join(" + "));
   const inner = (l: Length) => (!s.borderBox || !vpad.length ? length(l) : [length(l), ...vpad].join(" - "));
   let body = blocks(children);
+  // `align` around the block would also align its contents: reset them.
+  if (s.align) body = `align(start, ${body})`;
   // A zero-width strut column keeps the row at least `min-height` tall.
   if (s.minHeight) body = call("grid", { columns: "(0pt, 1fr)" }, call("block", { height: inner(s.minHeight) }), body);
   const spacing = {
@@ -329,8 +335,10 @@ function boxBlock(s: BoxStyle, children: Block[]): string {
     below: s.below && length(s.below),
     breakable: s.breakable === undefined ? undefined : String(s.breakable),
   };
+  const hpad = [s.inset?.left, s.inset?.right].filter((l): l is Length => !!l).map(length);
+  const width = s.width && (s.contentWidth && hpad.length ? [size(s.width), ...hpad].join(" + ") : size(s.width));
   const args = {
-    width: s.width && size(s.width),
+    width,
     height: s.height && outer(s.height),
     inset: s.inset && sides(s.inset, length),
     fill: s.fill && paint(s.fill),

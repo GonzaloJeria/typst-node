@@ -4,6 +4,7 @@ exports[`emitDocument > emits code-mode Typst 1`] = `
 "#set page(paper: "a4", margin: 2cm)
 #set text(font: ("Libertinus Serif",), size: 10pt, lang: "es", top-edge: "ascender", bottom-edge: "descender")
 #set par(leading: 0.2em)
+#show heading: it => it.body
 #{
   heading(level: 1, "Factura #001")
   align(right, par({
@@ -13,7 +14,7 @@ exports[`emitDocument > emits code-mode Typst 1`] = `
     link("https://example.com", "@example")
   }))
   table(columns: (1fr, auto, auto), table.header(repeat: true, table.cell(colspan: 2, par(strong("Ítem"))), []), table.cell(rowspan: 2, par("A")), [], table.cell(align: right, fill: rgb("#eeeeee"), []), [], [])
-  align(center, block(inset: (top: 4pt), fill: rgb("#fafafa"), breakable: false, enum(start: 3, par("uno"), [])))
+  align(center, block(inset: (top: 4pt), fill: rgb("#fafafa"), breakable: false, align(start, enum(start: 3, par("uno"), []))))
   pagebreak(weak: true)
   raw(block: true, lang: "ts", "const a = \\"b\\";\\n")
   line(length: 100%)

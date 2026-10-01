@@ -1,3 +1,4 @@
+import { hslToRgb, NAMED_COLORS, parseColorFunction, type Rgba } from "./colors.js";
 import type { Color, Gradient, GradientStop, Length, Shadow, TransformOp } from "../ir.js";
 
 /** Context needed to turn relative CSS units into absolute ones. */
@@ -6,10 +7,14 @@ export interface LengthContext {
   fontSize: number;
   /** Root font size, in pt. */
   rootFontSize: number;
+  /** Page box in pt, for viewport units (default: A4). */
+  viewport?: { width: number; height: number };
 }
 
+const A4_PT = { width: 595.28, height: 841.89 };
+
 const PX_TO_PT = 0.75;
-const LENGTH = /^(-?(?:\d+\.?\d*|\.\d+))(px|pt|pc|mm|cm|in|em|rem|%|q)?$/i;
+const LENGTH = /^([-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)(px|pt|pc|mm|cm|in|em|rem|%|q|ch|ex|lh|rlh|cap|ic|vw|vh|vmin|vmax|svw|svh|lvw|lvh|dvw|dvh|vi|vb)?$/i;
 
 /**
  * Parses a CSS length into an IR length. Relative units (px, em, rem) become
@@ -17,7 +22,8 @@ const LENGTH = /^(-?(?:\d+\.?\d*|\.\d+))(px|pt|pc|mm|cm|in|em|rem|%|q)?$/i;
  */
 export function parseLength(value: string, ctx: LengthContext): Length | undefined {
   const v = value.trim();
-  if (/^calc\(/i.test(v)) return parseCalc(v.slice(5, -1), ctx);
+  const fn = /^(calc|min|max|clamp)\((.*)\)$/is.exec(v);
+  if (fn) return parseCalc(fn[1]!.toLowerCase() === "calc" ? fn[2]! : v, ctx);
   const m = LENGTH.exec(v);
   if (!m) return undefined;
   const n = Number(m[1]);
@@ -35,7 +41,22 @@ export function parseLength(value: string, ctx: LengthContext): Length | undefin
     case "em": return { value: n * ctx.fontSize, unit: "pt" };
     case "rem": return { value: n * ctx.rootFontSize, unit: "pt" };
     case "%": return { value: n, unit: "%" };
+    // Font-relative units without font metrics: typical ratios for Latin fonts.
+    case "ch": return { value: n * ctx.fontSize * 0.5, unit: "pt" };
+    case "ex": return { value: n * ctx.fontSize * 0.5, unit: "pt" };
+    case "cap": return { value: n * ctx.fontSize * 0.7, unit: "pt" };
+    case "ic": return { value: n * ctx.fontSize, unit: "pt" };
+    case "lh": return { value: n * ctx.fontSize * 1.2, unit: "pt" };
+    case "rlh": return { value: n * ctx.rootFontSize * 1.2, unit: "pt" };
   }
+  // Viewport units: the viewport is the page box when printing.
+  const vp = ctx.viewport ?? A4_PT;
+  const viewport: Record<string, number> = {
+    vw: vp.width, svw: vp.width, lvw: vp.width, dvw: vp.width, vi: vp.width,
+    vh: vp.height, svh: vp.height, lvh: vp.height, dvh: vp.height, vb: vp.height,
+    vmin: Math.min(vp.width, vp.height), vmax: Math.max(vp.width, vp.height),
+  };
+  if (unit in viewport) return { value: round4((n * viewport[unit]!) / 100), unit: "pt" };
   return undefined;
 }
 
@@ -44,37 +65,77 @@ export function parseLength(value: string, ctx: LengthContext): Length | undefin
  * to pt, or kept as % when every length term is a percentage.
  */
 function parseCalc(expr: string, ctx: LengthContext): Length | undefined {
-  const tokens = expr.match(/\d*\.?\d+[a-z%]*|[-+*/()]/gi);
+  const q = evalCalc(expr, ctx);
+  if (!q) return undefined;
+  if (!q.dim) return q.n === 0 ? { value: 0, unit: "pt" } : undefined;
+  return { value: round4(q.n), unit: q.unit ?? "pt" };
+}
+
+function evalCalc(expr: string, ctx: LengthContext): { n: number; dim: boolean; unit?: "pt" | "%" } | undefined {
+  const tokens = expr.match(/[-+]?\d*\.?\d+(?:e[-+]?\d+)?[a-z%]*|[a-z-]+\(|[-+*/(),]/gi);
   if (!tokens || tokens.join("").length !== expr.replace(/\s+/g, "").length) return undefined;
+  // A sign glued to a number after an operand is a binary operator (`1px -2px` is invalid CSS anyway).
+  for (let i = 1; i < tokens.length; i++) {
+    const prev = tokens[i - 1]!;
+    if (/^[-+]\d|^[-+]\./.test(tokens[i]!) && !/^[-+*/(,]$|\($/.test(prev)) {
+      tokens.splice(i, 1, tokens[i]![0]!, tokens[i]!.slice(1));
+    }
+  }
   let pos = 0;
   let unit: "pt" | "%" | undefined;
   type Q = { n: number; dim: boolean };
+  const fail = (): undefined => {
+    pos = tokens.length + 1;
+    return undefined;
+  };
+  const args = (): Q[] | undefined => {
+    const out: Q[] = [];
+    for (;;) {
+      const q = sum();
+      if (!q) return undefined;
+      out.push(q);
+      const t = tokens[pos++];
+      if (t === ")") return out;
+      if (t !== ",") return undefined;
+    }
+  };
   const primary = (): Q | undefined => {
     const t = tokens[pos++];
-    if (t === "(") {
+    if (t === "(" || t?.toLowerCase() === "calc(") {
       const q = sum();
-      return tokens[pos++] === ")" ? q : undefined;
+      return tokens[pos++] === ")" ? q : fail();
     }
-    if (t === "-") {
+    if (t === "-" || t === "+") {
       const q = primary();
-      return q && { n: -q.n, dim: q.dim };
+      return q && { n: t === "-" ? -q.n : q.n, dim: q.dim };
     }
-    if (t === undefined || !/^\d*\.?\d+/.test(t)) return undefined;
-    if (/^\d*\.?\d+$/.test(t)) return { n: Number(t), dim: false };
+    const fn = t?.toLowerCase();
+    if (fn === "min(" || fn === "max(" || fn === "clamp(") {
+      const list = args();
+      if (!list || !list.length || list.some((q) => q.dim !== list[0]!.dim)) return fail();
+      const ns = list.map((q) => q.n);
+      if (fn === "clamp(") {
+        if (ns.length !== 3) return fail();
+        return { n: Math.max(ns[0]!, Math.min(ns[1]!, ns[2]!)), dim: list[0]!.dim };
+      }
+      return { n: fn === "min(" ? Math.min(...ns) : Math.max(...ns), dim: list[0]!.dim };
+    }
+    if (t === undefined || !/^[-+]?\d*\.?\d+/.test(t)) return fail();
+    if (/^[-+]?\d*\.?\d+(?:e[-+]?\d+)?$/i.test(t)) return { n: Number(t), dim: false };
     const l = parseLength(t, ctx);
-    if (!l) return undefined;
+    if (!l) return fail();
     const u = l.unit === "%" ? "%" : "pt";
-    if (unit && unit !== u) return undefined; // Mixing % with absolute lengths needs layout.
+    if (unit && unit !== u) return fail(); // Mixing % with absolute lengths needs layout.
     unit = u;
     const n = u === "%" ? l.value : toPt(l);
-    return n === undefined ? undefined : { n, dim: true };
+    return n === undefined ? fail() : { n, dim: true };
   };
   const product = (): Q | undefined => {
     let a = primary();
     while (a && (tokens[pos] === "*" || tokens[pos] === "/")) {
       const op = tokens[pos++];
       const b = primary();
-      if (!b || (a.dim && b.dim) || (op === "/" && (b.dim || b.n === 0))) return undefined;
+      if (!b || (a.dim && b.dim) || (op === "/" && (b.dim || b.n === 0))) return fail();
       a = { n: op === "*" ? a.n * b.n : a.n / b.n, dim: a.dim || b.dim };
     }
     return a;
@@ -84,14 +145,29 @@ function parseCalc(expr: string, ctx: LengthContext): Length | undefined {
     while (a && (tokens[pos] === "+" || tokens[pos] === "-")) {
       const op = tokens[pos++];
       const b = product();
-      if (!b || a.dim !== b.dim) return undefined;
-      a = { n: op === "+" ? a.n + b.n : a.n - b.n, dim: a.dim };
+      if (!b) return fail();
+      // A unitless zero mixes with lengths, as in `max(0, 1rem)`.
+      if (a.dim !== b.dim && !(a.n === 0 && !a.dim) && !(b.n === 0 && !b.dim)) return fail();
+      a = { n: op === "+" ? a.n + b.n : a.n - b.n, dim: a.dim || b.dim };
     }
     return a;
   };
   const q = sum();
-  if (!q || pos !== tokens.length || !q.dim) return q && !q.dim && q.n === 0 ? { value: 0, unit: "pt" } : undefined;
-  return { value: q.n, unit: unit ?? "pt" };
+  if (!q || pos !== tokens.length) return undefined;
+  return unit ? { ...q, unit } : q;
+}
+
+function round4(n: number): number {
+  return Math.round(n * 1e4) / 1e4;
+}
+
+/** Evaluates a unitless `calc()`/`min()`/`max()`/`clamp()` expression (e.g. `calc(1 / 2)`). */
+export function parseNumber(value: string): number | undefined {
+  const v = value.trim();
+  if (/^[-+]?\d*\.?\d+(?:e[-+]?\d+)?$/i.test(v)) return Number(v);
+  if (!/^(?:calc|min|max|clamp)\(/i.test(v)) return undefined;
+  const q = evalCalc(/^calc\(/i.test(v) ? v.slice(5, -1) : v, { fontSize: 12, rootFontSize: 12 });
+  return q && !q.dim ? q.n : undefined;
 }
 
 /** Converts an absolute IR length to pt (undefined for `%`/`fr`/`em`). */
@@ -121,60 +197,50 @@ export function parseFontSize(value: string, parentPt: number, rootPt: number): 
   return toPt(l);
 }
 
-const NAMED: Record<string, string> = {
-  black: "#000000", white: "#ffffff", red: "#ff0000", green: "#008000", blue: "#0000ff",
-  yellow: "#ffff00", orange: "#ffa500", purple: "#800080", gray: "#808080", grey: "#808080",
-  silver: "#c0c0c0", maroon: "#800000", olive: "#808000", lime: "#00ff00", aqua: "#00ffff",
-  cyan: "#00ffff", teal: "#008080", navy: "#000080", fuchsia: "#ff00ff", magenta: "#ff00ff",
-  pink: "#ffc0cb", brown: "#a52a2a", gold: "#ffd700", indigo: "#4b0082", violet: "#ee82ee",
-  darkgray: "#a9a9a9", darkgrey: "#a9a9a9", lightgray: "#d3d3d3", lightgrey: "#d3d3d3",
-  whitesmoke: "#f5f5f5", gainsboro: "#dcdcdc", dimgray: "#696969", dimgrey: "#696969",
-  darkblue: "#00008b", darkred: "#8b0000", darkgreen: "#006400", steelblue: "#4682b4",
-  transparent: "#00000000",
-};
-
-const HSL = /^hsla?\(\s*([^)]*)\)$/i;
 const HEX = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-const RGB = /^rgba?\(\s*([^)]*)\)$/i;
+const LEGACY = /^(rgba?|hsla?)\(\s*(.*)\)$/is;
 
 /** Parses a CSS color into `#rrggbb[aa]`, or undefined when unsupported. */
 export function parseColor(value: string): Color | undefined {
+  const c = parseRgba(value);
+  if (!c) return undefined;
+  const hexed = c.map((n) => Math.round(n * 255).toString(16).padStart(2, "0"));
+  if (hexed[3] === "ff") hexed.pop();
+  return `#${hexed.join("")}`;
+}
+
+function parseRgba(value: string): Rgba | undefined {
   const v = value.trim().toLowerCase();
-  if (v in NAMED) return NAMED[v] as Color;
+  const named = NAMED_COLORS[v];
+  if (named) return hexToRgba(named);
   const hex = HEX.exec(v);
   if (hex) {
     let h = hex[1]!;
     if (h.length <= 4) h = [...h].map((c) => c + c).join("");
-    return `#${h}`;
+    return hexToRgba(h);
   }
-  const hsl = HSL.exec(v);
-  if (hsl) {
-    const parts = hsl[1]!.split(/\s*[,/]\s*|\s+/).filter(Boolean);
+  const legacy = LEGACY.exec(v);
+  if (legacy) {
+    const parts = legacy[2]!.split(/\s*[,/]\s*|\s+/).filter(Boolean);
     if (parts.length < 3 || parts.length > 4) return undefined;
-    const h = ((parseFloat(parts[0]!) % 360) + 360) % 360;
-    const sat = parseFloat(parts[1]!) / 100;
-    const lig = parseFloat(parts[2]!) / 100;
-    if (![h, sat, lig].every(Number.isFinite)) return undefined;
-    const k = (n: number) => (n + h / 30) % 12;
-    const a = sat * Math.min(lig, 1 - lig);
-    const f = (n: number) => 255 * (lig - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)));
-    const alpha = parts[3] === undefined ? "" : `, ${parts[3]}`;
-    return parseColor(`rgb(${f(0)}, ${f(8)}, ${f(4)}${alpha})`);
+    const num = (p: string, full: number) => (p === "none" ? 0 : p.endsWith("%") ? (parseFloat(p) / 100) * full : Number(p));
+    const alpha = parts[3] === undefined ? 1 : num(parts[3], 1);
+    let rgb: number[];
+    if (legacy[1]!.startsWith("rgb")) rgb = parts.slice(0, 3).map((p) => num(p, 255) / 255);
+    else {
+      const h = parseFloat(parts[0]!) * (/turn$/.test(parts[0]!) ? 360 : /rad$/.test(parts[0]!) && !/grad$/.test(parts[0]!) ? 180 / Math.PI : /grad$/.test(parts[0]!) ? 0.9 : 1);
+      rgb = hslToRgb(h, num(parts[1]!, 100) / 100, num(parts[2]!, 100) / 100);
+    }
+    const out = [...rgb, alpha];
+    if (out.some((n) => !Number.isFinite(n))) return undefined;
+    return out.map((n) => Math.min(1, Math.max(0, n))) as Rgba;
   }
-  const rgb = RGB.exec(v);
-  if (rgb) {
-    const parts = rgb[1]!.split(/\s*[,/]\s*|\s+/).filter(Boolean);
-    if (parts.length < 3 || parts.length > 4) return undefined;
-    const channel = (p: string) => (p.endsWith("%") ? (Number(p.slice(0, -1)) / 100) * 255 : Number(p));
-    const alpha = (p: string) => (p.endsWith("%") ? Number(p.slice(0, -1)) / 100 : Number(p)) * 255;
-    const nums = [channel(parts[0]!), channel(parts[1]!), channel(parts[2]!)];
-    if (parts[3] !== undefined) nums.push(alpha(parts[3]));
-    if (nums.some((n) => !Number.isFinite(n))) return undefined;
-    const hexed = nums.map((n) => Math.round(Math.min(255, Math.max(0, n))).toString(16).padStart(2, "0"));
-    if (hexed.length === 4 && hexed[3] === "ff") hexed.pop();
-    return `#${hexed.join("")}`;
-  }
-  return undefined;
+  return parseColorFunction(v, parseRgba);
+}
+
+function hexToRgba(h: string): Rgba {
+  const n = (i: number) => parseInt(h.slice(i, i + 2), 16) / 255;
+  return [n(0), n(2), n(4), h.length === 8 ? n(6) : 1];
 }
 
 /** Splits a CSS value on top-level whitespace (ignoring spaces inside parens). */
@@ -313,6 +379,31 @@ export function parseTransform(value: string, ctx: LengthContext): TransformOp[]
   }
   if (consumed.replace(/\s+/g, "") !== v.replace(/\s+/g, "")) return undefined;
   return ops;
+}
+
+/**
+ * `box-shadow: inset 0 0 0 <huge spread> <color>` paints the whole padding
+ * box (Bootstrap tables stripe rows this way): returns that color.
+ */
+export function parseInsetFill(value: string): Color | undefined {
+  const tokens = splitValue(value.trim());
+  if (tokens[0]?.toLowerCase() !== "inset" || tokens.length !== 6) return undefined;
+  if (!tokens.slice(1, 4).every((t) => /^0(?:[a-z]+)?$/.test(t))) return undefined;
+  const spread = parseLength(tokens[4]!, { fontSize: 12, rootFontSize: 12 });
+  if (!spread || spread.unit !== "pt" || spread.value < 500) return undefined;
+  return parseColor(tokens[5]!);
+}
+
+/** Composites `top` over `bottom` (both `#rrggbb[aa]`). */
+export function overColor(bottom: Color, top: Color): Color {
+  const rgba = (c: Color) => [1, 3, 5, 7].map((i) => (i === 7 && c.length < 9 ? 255 : parseInt(c.slice(i, i + 2), 16)) / 255);
+  const [br, bg, bb, ba] = rgba(bottom) as [number, number, number, number];
+  const [tr, tg, tb, ta] = rgba(top) as [number, number, number, number];
+  const a = ta + ba * (1 - ta);
+  if (a === 0) return "#00000000";
+  const mix = (t: number, b: number) => Math.round(((t * ta + b * ba * (1 - ta)) / a) * 255).toString(16).padStart(2, "0");
+  const alpha = Math.round(a * 255);
+  return `#${mix(tr, br)}${mix(tg, bg)}${mix(tb, bb)}${alpha === 255 ? "" : alpha.toString(16).padStart(2, "0")}`;
 }
 
 /** Parses outer `box-shadow` layers; `inset` shadows make the value unsupported. */

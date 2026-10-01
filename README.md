@@ -240,6 +240,23 @@ alfabética y romana, `none`); tablas con rowspan/colspan; flex en fila (con `ju
 `align-items`) y grid
 explícito; `@page`; saltos de página.
 
+**CSS moderno (Tailwind, Bootstrap):** el CSS compilado de Tailwind v4 y
+Bootstrap 5 se lee completo: `@layer` (con su orden de cascada), `@media`
+evaluado contra el tamaño de la página (`print` sí, `screen` no; los
+breakpoints `min-width`/`width >=` se comparan con el ancho de `@page`, como
+hace Chrome al imprimir), `@supports`, `@property` (valores iniciales de
+variables), anidado de reglas (`&`), selectores nivel 4 (`:is()`, `:where()`,
+`:not()`, `:has()`, `+`, `~`, `:nth-child(An+B of S)`, `:*-of-type`,
+`:empty`, clases escapadas como `.md\:flex` o `.w-1\/2`), colores
+`oklch()`/`oklab()`/`lab()`/`lch()`/`hwb()`/`color()`/`color-mix()`,
+`min()`/`max()`/`clamp()`, unidades `vw`/`vh` (relativas a la página),
+`ch`/`ex`/`lh`, propiedades lógicas (`padding-inline`, `margin-block-start`,
+`inset-inline`…), el shorthand `font`, `box-sizing` en anchos y altos,
+`grid-template-columns` con `repeat()` y `minmax()`, y texto suelto dentro de
+flex/grid. Estados interactivos (`:hover`, `:focus`…) nunca aplican en papel y
+no generan warnings. Si un valor no se puede renderizar y la regla traía un
+fallback (`display: block; display: -webkit-box`), se usa el fallback.
+
 **Posicionamiento y efectos:** `position: absolute` (anclado a la esquina que
 indiquen `top`/`right`/`bottom`/`left`, dentro del ancestro posicionado más
 cercano), `position: relative` con desplazamientos (también en línea),
@@ -272,7 +289,9 @@ fluye columna a columna entre páginas). Ideal para términos y condiciones.
 inline, combinables con `auto`) y `line-height` (número, %, longitud;
 `normal` ≈ 1.2).
 
-**Todavía no:** `float`, fondos repetidos (`repeat`) o con varias capas, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
+**Todavía no:** `flex-wrap` (la grilla `.row` de Bootstrap funciona mientras
+los `.col-*` quepan en una fila), `flex-direction: column` con alineación,
+`calc()` que mezcla `%` con longitudes, `@container`, `@font-face`, `float`, fondos repetidos (`repeat`) o con varias capas, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
 márgenes o tamaño distintos en `@page :first`, `@page :left/:right`,
 `@page nombre:first`, `column-width`, `column-rule`, `column-span`.
 
@@ -293,3 +312,24 @@ los PNG renderizados y los de diferencia (en rojo) quedan en `test/visual/__diff
 - Solo se usan las fuentes embebidas en Typst, así que emoji y CJK aparecen como tofu en los fixtures. Es lo esperado sin fuentes adicionales.
 
 Además, una prueba de consistencia verifica que todo el texto del `<body>` llegue al IR (detecta contenido perdido).
+
+### Comparación con Chrome
+
+`pnpm test:chrome` imprime con Chromium (Playwright) las plantillas de
+`packages/pdf/test/chrome/fixtures/` (Tailwind v4, Bootstrap 5 y CSS moderno
+escrito a mano) y las compara con lo que genera la librería. Ambos PDF se
+rasterizan con Typst a 40 ppi, Chrome usa la misma Inter incluida (vía
+fontconfig) y el puntaje es el porcentaje de píxeles con contenido que
+coinciden tras un leve desenfoque, así que mide layout y colores más que el
+dibujo de cada letra.
+
+- Los puntajes registrados están en `test/chrome/chrome-scores.json`; la prueba falla si una plantilla baja más de 2 puntos.
+- Para registrar una mejora: `UPDATE_CHROME=1 pnpm test:chrome` y hacer commit del JSON.
+- Las imágenes lado a lado (Chrome | librería | diferencia) y los warnings quedan en `test/chrome/__report__/`.
+- No corre en CI (necesita Chromium); se salta sola si no lo encuentra (`CHROMIUM_PATH` para indicar la ruta).
+
+| Plantilla | Antes | Ahora |
+| --- | --- | --- |
+| Bootstrap 5 (reporte) | 58,7 % | 74,4 % |
+| CSS moderno | 75,6 % | 80,4 % |
+| Tailwind v4 (factura) | 81,8 % | 86,6 % |
