@@ -45,7 +45,7 @@ export async function prepareHtml(source: string, baseDir: string | undefined): 
     return "";
   });
   for (const { href } of links) {
-    if (/^https?:\/\/fonts\.googleapis\.com\/css/i.test(href)) googleFonts.push(href.replace(/&amp;/g, "&"));
+    if (/^(https?:)?\/\/fonts\.googleapis\.com\/css/i.test(href)) googleFonts.push(href.replace(/&amp;/g, "&").replace(/^(https?:)?\/\//i, "https://"));
     else if (/^(https?:)?\/\//i.test(href)) warnings.push(`<link rel="stylesheet" href="${href}"> was ignored: remote stylesheets are not downloaded (pass the CSS in the template)`);
     else if (!baseDir) warnings.push(`<link rel="stylesheet" href="${href}"> was ignored: the template has no base directory`);
     else {
@@ -70,6 +70,8 @@ interface GoogleFont {
 }
 
 const fontCache = new Map<string, Promise<GoogleFont[]>>();
+/** Largest font file accepted from Google Fonts. */
+const MAX_FONT_BYTES = 10 * 1024 * 1024;
 
 /**
  * Downloads the fonts of a Google Fonts stylesheet. Requested without a
@@ -84,7 +86,7 @@ export function googleFonts(url: string, timeoutMs = 10_000): Promise<GoogleFont
       const css = await res.text();
       const faces = [...css.matchAll(/@font-face\s*{([^}]*)}/g)].flatMap((m) => {
         const family = /font-family:\s*['"]?([^'";]+)/.exec(m[1]!)?.[1]?.trim();
-        const src = /url\(([^)]+\.(?:ttf|otf))\)/.exec(m[1]!)?.[1];
+        const src = /url\((https:\/\/fonts\.gstatic\.com\/[^)]+\.(?:ttf|otf))\)/.exec(m[1]!)?.[1];
         return family && src ? [{ family, src }] : [];
       });
       const unique = [...new Map(faces.map((f) => [f.src, f])).values()];
@@ -92,7 +94,9 @@ export function googleFonts(url: string, timeoutMs = 10_000): Promise<GoogleFont
         unique.map(async (f) => {
           const r = await fetch(f.src, { signal: AbortSignal.timeout(timeoutMs) });
           if (!r.ok) throw new Error(`HTTP ${r.status} for ${f.src}`);
-          return { family: f.family, bytes: new Uint8Array(await r.arrayBuffer()) };
+          const bytes = new Uint8Array(await r.arrayBuffer());
+          if (bytes.length > MAX_FONT_BYTES) throw new Error(`font larger than ${MAX_FONT_BYTES} bytes: ${f.src}`);
+          return { family: f.family, bytes };
         }),
       );
     })();

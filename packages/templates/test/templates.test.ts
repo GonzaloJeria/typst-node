@@ -120,14 +120,26 @@ describe("templates", () => {
     const server = await startDevServer({ templates, port: 0 });
     try {
       expect(await (await fetch(`${server.url}/api/templates`)).json()).toEqual(["factura", "informes/mensual"]);
-      const r = (await (await fetch(`${server.url}/api/render`, { method: "POST", body: JSON.stringify({ name: "factura" }) })).json()) as { id: string; warnings: string[] };
+      const post = (headers: Record<string, string>) => fetch(`${server.url}/api/render`, { method: "POST", headers, body: JSON.stringify({ name: "factura" }) });
+      // A cross-site form post (not JSON) is refused.
+      expect((await post({ "content-type": "text/plain" })).status).toBe(415);
+      const r = (await (await post({ "content-type": "application/json" })).json()) as { id: string; warnings: string[] };
       const pdf = await fetch(`${server.url}/out/${r.id}.pdf`);
       expect(pdf.headers.get("content-type")).toBe("application/pdf");
-      const html = await (await fetch(`${server.url}/out/${r.id}.html`)).text();
+      const page = await fetch(`${server.url}/out/${r.id}.html`);
+      expect(page.headers.get("content-security-policy")).toContain("script-src 'none'");
+      const html = await page.text();
       expect(html).toContain('<base href="/assets/factura/">');
       const css = await fetch(`${server.url}/assets/factura/extra.css`);
       expect(await css.text()).toContain(".firma");
       expect((await fetch(`${server.url}/assets/factura/../_partials/firma.html`)).status).toBe(404);
+      // DNS rebinding: another host name pointing at this server is refused.
+      const { request } = await import("node:http");
+      const status = await new Promise<number>((resolve, reject) => {
+        const u = new URL(server.url);
+        request({ host: u.hostname, port: u.port, path: "/api/templates", headers: { host: "evil.example:80" } }, (res) => resolve(res.statusCode!)).on("error", reject).end();
+      });
+      expect(status).toBe(403);
     } finally {
       await server.close();
     }

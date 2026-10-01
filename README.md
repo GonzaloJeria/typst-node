@@ -341,6 +341,32 @@ res.end(Buffer.from(pdf));
 
 Ver [Soporte de HTML/CSS](#soporte-de-htmlcss) para el detalle.
 
+## Migrar desde Puppeteer o Playwright
+
+| Puppeteer / Playwright | typst-node |
+|---|---|
+| `browser.newPage()` + `page.setContent(html)` + `page.pdf()` | `renderer.render(html)` (un `PdfRenderer` por proceso) |
+| `page.pdf({ format: "A4", margin })` | `@page { size: A4; margin: 15mm }` en el CSS, o `page` en secciones/templates |
+| `displayHeaderFooter`, `headerTemplate`, `footerTemplate` | `page.header` / `page.footer` (con `{{page}}` y `{{pages}}`), o `@top-center`/`@bottom-center` |
+| `<script src="https://cdn.tailwindcss.com">` | `tailwind: true` (incluido) o `@gjeria/pdf-templates` |
+| `<link rel="stylesheet" href="…">` | el CSS en `<style>`, la opción `css`, o una hoja local en un template |
+| `printBackground: true` | siempre activo |
+| `page.waitForNetworkIdle()` / imágenes remotas | `assets: { allowRemote: true, allowedHosts: [...] }` (se descargan antes de compilar) |
+| JavaScript que arma el HTML en el navegador (gráficos, `document.write`) | genera el HTML en Node (Handlebars, JSX) y los gráficos como SVG |
+| `emulateMediaType("print")` | siempre es impresión: `@media print` y `print:` aplican |
+
+Diferencias a tener en cuenta:
+
+- **Sin `@page { margin }`, la página no tiene margen**, igual que `page.pdf()`
+  sin `margin`. Si antes pasabas `margin` en `page.pdf()`, ponlo en `@page`.
+- **No hay JavaScript.** Lo que en el navegador calcula un script (totales,
+  gráficos con Chart.js) se calcula antes, en Node.
+- **Fuentes:** `sans-serif` es Inter (incluida); las demás se declaran con
+  `@font-face` (TTF/OTF) o con un `<link>` a Google Fonts en
+  `@gjeria/pdf-templates`.
+- **Revisa `warnings`:** lista todo lo que no se pudo representar, en vez de
+  fallar en silencio.
+
 ## En producción
 
 Una aplicación solo instala `@gjeria/typst-html-pdf`. El motor viene incluido:
@@ -578,12 +604,22 @@ dibujo de cada letra.
 - Las imágenes lado a lado (Chrome | librería | diferencia) y los warnings quedan en `test/chrome/__report__/`.
 - No corre en CI (necesita Chromium); se salta sola si no lo encuentra (`CHROMIUM_PATH` para indicar la ruta).
 
-| Plantilla | 0.1.1 | Ahora |
+| Plantilla | 0.1.1 | 0.2.0 |
 | --- | --- | --- |
-| Tailwind v4 (factura) | 81,8 % | 99,8 % |
-| Tailwind v4 (orden de compra, sin `@page`) | — | 94,2 % |
-| HTML simple, sin framework | 72,8 % | 94,8 % |
-| CSS moderno (capas, anidado, `oklch`) | 75,6 % | 94,6 % |
-| Bootstrap 5 (reporte) | 67,5 % | 84,6 % |
-| Flex con `wrap`, columnas y `calc()` | 49,4 % | 82,1 % |
-| Efectos (esquinas, `overflow`, `object-fit`, sombras) | — | 76,7 % |
+| Tailwind: factura | 81,8 % | 100 % |
+| Tailwind: boleta térmica (80 mm) | — | 99,4 % |
+| Tailwind: cotización (degradado, tarjetas, badges) | — | 98,6 % |
+| Tailwind: estado de cuenta, 4 páginas (tabla larga, encabezado repetido) | — | 99,1 · 98,4 · 97,7 · 90,6 % |
+| Tailwind: reporte (KPIs, gráfico SVG, barras) | — | 97,4 % |
+| Tailwind: orden de compra (sin `@page`) | — | 97,2 % |
+| Tailwind: certificado (A4 horizontal, serif) | — | 94,7 % |
+| Tailwind: carta (texto corrido, serif) | — | 88,8 % |
+| HTML simple, sin framework | 72,8 % | 99,8 % |
+| Bootstrap 5 (reporte) | 67,5 % | 98,9 % |
+| CSS moderno (capas, anidado, `oklch`) | 75,6 % | 98,4 % |
+| Flex con `wrap`, columnas y `calc()` | 49,4 % | 98,3 % |
+| Efectos (esquinas, `overflow`, `object-fit`, sombras) | — | 95,9 % |
+
+Lo que más resta hoy son los cortes de línea en texto corrido largo (la carta):
+cada motor mide el texto con pequeñas diferencias y una palabra puede pasar a
+la línea siguiente.

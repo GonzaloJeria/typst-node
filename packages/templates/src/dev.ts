@@ -46,7 +46,12 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
   };
   const json = (res: ServerResponse, status: number, body: unknown) => send(res, status, "application/json; charset=utf-8", JSON.stringify(body));
 
+  const host = options.host ?? "127.0.0.1";
+  const loopback = /^(127\.\d+\.\d+\.\d+|localhost|::1)$/.test(host);
   const handle = async (req: IncomingMessage, res: ServerResponse) => {
+    // DNS rebinding: a web page cannot reach this server under another name and read templates.
+    const hostname = (req.headers.host ?? "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+    if (loopback && !/^(127\.\d+\.\d+\.\d+|localhost|::1)$/.test(hostname)) return send(res, 403, "text/plain", "Forbidden host");
     const url = new URL(req.url ?? "/", "http://localhost");
     const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
     if (url.pathname === "/") return send(res, 200, "text/html; charset=utf-8", UI);
@@ -56,6 +61,8 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
       return json(res, 200, { sample: def.sample ?? {} });
     }
     if (url.pathname === "/api/render" && req.method === "POST") {
+      // Only the preview page posts here (a cross-site form cannot send JSON).
+      if (!/^application\/json\b/.test(req.headers["content-type"] ?? "")) return send(res, 415, "text/plain", "Expected application/json");
       const body = JSON.parse(await readBody(req)) as { name: string; data?: unknown };
       const started = performance.now();
       try {
@@ -86,7 +93,13 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
       let html = /<head\b[^>]*>/i.test(out.html) ? out.html.replace(/<head\b[^>]*>/i, (h) => h + base) : base + out.html;
       // Show the print styles, as the PDF uses them.
       html = html.replace(/@media\s+print\b/gi, "@media all").replace(/@media\s+screen\b/gi, "@media not all");
-      return send(res, 200, "text/html; charset=utf-8", html);
+      // The rendered template is shown, never run: no scripts, no network beyond this server.
+      res.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "content-security-policy": "default-src 'self' data:; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' data:; script-src 'none'",
+      });
+      return res.end(html);
     }
     if (parts[0] === "assets" && parts.length > 2) {
       // The template name may contain slashes: find the longest prefix that is a template.
@@ -130,7 +143,6 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
     });
   }
 
-  const host = options.host ?? "127.0.0.1";
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(options.port ?? 3333, host, resolve);

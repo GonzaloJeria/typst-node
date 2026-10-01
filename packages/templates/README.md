@@ -232,6 +232,21 @@ Lo que conviene saber:
   Así no se aplica el *preflight* de Tailwind, que quita márgenes y tamaños
   por defecto de `h1`, `p`, listas, etc.
 
+## Seguridad
+
+- **Datos:** `{{valor}}` escapa el HTML; usa `{{{valor}}}` solo con HTML en el
+  que confías. Handlebars no permite acceder a propiedades del prototipo.
+- **Templates desde la base de datos:** son código (HTML/CSS), trátalos como
+  tal. Las rutas relativas (imágenes, `<link>`, `@import`) no salen de
+  `baseDir`; sin `baseDir`, los archivos locales se rechazan. Las imágenes
+  remotas siguen las reglas de `assets` (desactivadas por defecto, con
+  protección SSRF).
+- **Google Fonts:** solo se descargan hojas de `fonts.googleapis.com` y
+  archivos de `fonts.gstatic.com`, de hasta 10 MB.
+- **`typst-pdf dev`** escucha solo en `127.0.0.1`, rechaza otros nombres de
+  host (DNS rebinding) y muestra el HTML sin ejecutar scripts. No lo expongas
+  en un servidor.
+
 ## Buenas prácticas
 
 - **Usa Tailwind** y revisa los avisos: una clase mal escrita no genera CSS y
