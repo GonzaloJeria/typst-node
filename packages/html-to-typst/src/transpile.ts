@@ -1,6 +1,6 @@
 import { parse } from "parse5";
 import { Cascade } from "./css/cascade.js";
-import { parseStylesheet, type Declaration } from "./css/parse.js";
+import { parseStylesheet, type Declaration, type Stylesheet } from "./css/parse.js";
 import { expandBox, parseColor, parseFontSize, parseGradient, parseLength, splitValue, toPt, type LengthContext } from "./css/values.js";
 import type { MediaContext } from "./css/conditions.js";
 import { backgroundImage, Converter, lineHeightOf, type ConvertOptions } from "./convert.js";
@@ -36,6 +36,26 @@ export interface TranspileResult {
   warnings: string[];
   /** Image sources referenced by the document, to resolve into virtual files. */
   assets: string[];
+  /** Fonts declared with `@font-face` that Typst can load (TTF/OTF): CSS family and URL. */
+  fontFaces: FontFace[];
+}
+
+export interface FontFace {
+  family: string;
+  url: string;
+}
+
+/** Picks the TrueType/OpenType source of each `@font-face`; Typst cannot read WOFF. */
+function usableFontFaces(faces: Stylesheet["fontFaces"], warnings: Set<string>): FontFace[] {
+  const out: FontFace[] = [];
+  for (const face of faces) {
+    const src = face.sources.find((s) =>
+      s.format ? /^(truetype|opentype)$/.test(s.format) : !/\.woff2?(?:[?#]|$)|^data:(?:font|application)\/(?:x-)?font-woff/i.test(s.url),
+    );
+    if (src) out.push({ family: face.family, url: src.url });
+    else warnings.add(`@font-face ${face.family} ignored: only TTF and OTF fonts are supported (not WOFF/WOFF2)`);
+  }
+  return out;
 }
 
 export function htmlToTypst(html: string, options: TranspileOptions = {}): TranspileResult {
@@ -111,6 +131,7 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   const lang = attr(htmlEl, "lang")?.split("-")[0]?.toLowerCase();
   if (lang && /^[a-z]{2,3}$/.test(lang)) document.lang = lang;
 
+  const fontFaces = usableFontFaces(sheet.fontFaces, converter.warnings);
   const warnings = [...new Set([...converter.warnings, ...cascade.warnings])];
   if (options.strict && warnings.length) throw new TranspileError(warnings);
 
@@ -118,7 +139,7 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   const found = new Set<string>();
   mapImages(document, (src) => (found.add(src), src));
   const assets = [...found];
-  return { source: emitDocument(document), document, warnings, assets };
+  return { source: emitDocument(document), document, warnings, assets, fontFaces };
 }
 
 /**

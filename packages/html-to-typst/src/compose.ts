@@ -1,6 +1,6 @@
 import { emitDocument } from "./emit.js";
 import type { Block, Document } from "./ir.js";
-import { htmlToTypst, TranspileError, type TranspileOptions, type TranspileResult } from "./transpile.js";
+import { htmlToTypst, TranspileError, type FontFace, type TranspileOptions, type TranspileResult } from "./transpile.js";
 
 /** Page settings for a layout or a section, written as CSS values. */
 export interface PageOptions {
@@ -48,6 +48,7 @@ export function composeToTypst(input: ComposeInput, options: TranspileOptions = 
   const children: Block[] = [];
   const warnings: string[] = [];
   const assets = new Set<string>();
+  const fontFaces: FontFace[] = [];
   let lang: string | undefined;
 
   input.sections.forEach((section, i) => {
@@ -68,11 +69,12 @@ export function composeToTypst(input: ComposeInput, options: TranspileOptions = 
     const label = input.sections.length > 1 ? `[section ${i + 1}] ` : "";
     for (const w of result.warnings) warnings.push(label + w);
     for (const a of result.assets) assets.add(a);
+    for (const f of result.fontFaces) if (!fontFaces.some((x) => x.family === f.family && x.url === f.url)) fontFaces.push(f);
   });
 
   if (strict && warnings.length) throw new TranspileError(warnings);
   const document: Document = { children, ...(lang ? { lang } : {}) };
-  return { source: emitDocument(document), document, warnings, assets: [...assets] };
+  return { source: emitDocument(document), document, warnings, assets: [...assets], fontFaces };
 }
 
 function pageCss(page: PageOptions): string {

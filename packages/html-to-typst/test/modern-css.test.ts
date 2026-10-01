@@ -187,3 +187,38 @@ describe("modern values", () => {
     expect(source(`<div style="box-sizing: border-box; width: 100pt; padding: 0 10pt; background: red">x</div>`)).toContain("width: 100pt,");
   });
 });
+
+describe("visual effects", () => {
+  it("rounds corners independently", () => {
+    const out = source(`<div style="border-radius: 8px 8px 0 0; background: #eee">x</div>`);
+    expect(out).toContain("radius: (top-left: 6pt, top-right: 6pt)");
+    expect(source(`<div style="border-radius: 4px; background: #eee">x</div>`)).toContain("radius: 3pt");
+  });
+
+  it("clips overflowing content", () => {
+    const r = htmlToTypst(`<div style="height: 20px; overflow: hidden; background: #eee">x</div>`);
+    expect(r.source).toContain("clip: true");
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("maps object-fit, stretching by default like CSS", () => {
+    const img = (style: string) => source(`<img src="a.png" style="width: 40px; height: 20px; ${style}">`);
+    expect(img("")).toContain('fit: "stretch"');
+    expect(img("object-fit: cover")).toContain('fit: "cover"');
+    expect(img("object-fit: contain")).toContain('fit: "contain"');
+    expect(source(`<img src="a.png" style="width: 40px">`)).not.toContain("fit:");
+  });
+
+  it("collects @font-face fonts Typst can read", () => {
+    const r = htmlToTypst(`<style>
+      @font-face { font-family: "Brand"; src: url(brand.woff2) format("woff2"), url("brand.ttf") format("truetype") }
+      @font-face { font-family: Web; src: url(web.woff) }
+    </style><p>x</p>`);
+    expect(r.fontFaces).toEqual([{ family: "Brand", url: "brand.ttf" }]);
+    expect(r.warnings).toEqual(["@font-face Web ignored: only TTF and OTF fonts are supported (not WOFF/WOFF2)"]);
+  });
+
+  it("uses font aliases for CSS families", () => {
+    expect(htmlToTypst(`<p style="font-family: Brand, sans-serif">x</p>`, { fontAliases: { brand: "Acme Sans" } }).source).toContain('"Acme Sans", "Inter"');
+  });
+});

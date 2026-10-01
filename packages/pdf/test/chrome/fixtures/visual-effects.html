@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 15mm }
+  body { margin: 0; font-family: sans-serif; font-size: 10pt; line-height: 1.4; color: #222 }
+  h2 { font-size: 13pt; margin: 16px 0 8px }
+  .tabs { display: flex; gap: 4px }
+  .tab { background: #3949ab; color: white; padding: 6px 14px; border-radius: 8px 8px 0 0 }
+  .panel { border: 2px solid #3949ab; border-radius: 0 12px 12px 12px; padding: 12px; background: #e8eaf6 }
+  .clip { width: 160px; height: 40px; overflow: hidden; border: 1px solid #999; padding: 4px; background: #fff8e1 }
+  .imgs { display: flex; gap: 12px }
+  .imgs img { width: 120px; height: 90px; border: 1px solid #444 }
+  .cover { object-fit: cover }
+  .contain { object-fit: contain }
+  .card { border-radius: 16px; overflow: hidden; border: 1px solid #ccc; width: 260px }
+  .card .head { background: linear-gradient(90deg, #00897b, #43a047); color: white; padding: 10px; font-weight: bold }
+  .card .body { padding: 10px }
+  .shadow { box-shadow: 0 4px 10px rgba(0,0,0,.25); border-radius: 10px; padding: 12px; width: 260px; background: white }
+</style>
+</head>
+<body>
+  <h2>Esquinas distintas</h2>
+  <div class="tabs"><span class="tab">Resumen</span><span class="tab">Detalle</span></div>
+  <div class="panel">Panel con la esquina superior izquierda recta y las demás redondeadas.</div>
+
+  <h2>overflow: hidden</h2>
+  <div class="clip">Este texto es demasiado largo para la caja y debería quedar recortado al alto de 40px, sin desbordar hacia abajo.</div>
+
+  <h2>object-fit</h2>
+  <div class="imgs">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAKUlEQVR4nGOQizpBNvrQI0c2Yhi1eNTiUYtHLR61eNTiUYtHLR45FgMARHR03SlyQygAAAAASUVORK5CYII=" alt="fill">
+    <img class="cover" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAKUlEQVR4nGOQizpBNvrQI0c2Yhi1eNTiUYtHLR61eNTiUYtHLR45FgMARHR03SlyQygAAAAASUVORK5CYII=" alt="cover">
+    <img class="contain" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAKUlEQVR4nGOQizpBNvrQI0c2Yhi1eNTiUYtHLR61eNTiUYtHLR45FgMARHR03SlyQygAAAAASUVORK5CYII=" alt="contain">
+  </div>
+
+  <h2>Tarjeta recortada</h2>
+  <div class="card"><div class="head">Encabezado con degradado</div><div class="body">El encabezado respeta las esquinas redondeadas de la tarjeta.</div></div>
+
+  <h2>Sombra</h2>
+  <div class="shadow">Caja con sombra difusa y esquinas redondeadas.</div>
+</body>
+</html>

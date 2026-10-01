@@ -1,4 +1,4 @@
-import type { Color, GradientStop, HAlign, Length, Paint, Sides, Size, Stroke } from "./ir.js";
+import type { Color, GradientStop, HAlign, Length, Paint, Sides, Size, Stroke, Radius } from "./ir.js";
 
 /**
  * Every piece of user text reaches Typst as a string literal, never as markup,
@@ -96,4 +96,13 @@ function normalizeStops(stops: GradientStop[]): { color: Color; offset: number }
     for (let k = i; k < j; k++) offsets[k] = from + ((to - from) * (k - i + 1)) / (j - i + 1);
   }
   return stops.map((s, i) => ({ color: s.color, offset: Math.min(100, Math.max(0, offsets[i]!)) }));
+}
+
+/** A Typst `radius`: one length, or a dictionary of corners. */
+export function radius(r: Radius): string {
+  if ("unit" in r) return length(r);
+  const parts = ([["top-left", r.topLeft], ["top-right", r.topRight], ["bottom-right", r.bottomRight], ["bottom-left", r.bottomLeft]] as const)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}: ${length(v!)}`);
+  return `(${parts.join(", ")})`;
 }

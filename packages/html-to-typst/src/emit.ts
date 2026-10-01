@@ -1,5 +1,5 @@
 import type { BackgroundImage, Block, BoxStyle, FirstPage, Length, LineHeight, PageRun, PageSetup, Sides, Stroke, Document, Inline, MarginBand, MarginBox, Shadow, Size, TableCell, TableRow, TextStyle, TransformOp } from "./ir.js";
-import { align, call, color, length, num, paint, sides, size, str, stroke } from "./literals.js";
+import { align, call, color, length, num, paint, radius, sides, size, str, stroke } from "./literals.js";
 
 /**
  * IR → Typst source. The body is emitted entirely in code mode: every node is
@@ -156,7 +156,7 @@ export function emitInline(node: Inline): string {
           outset: s.outset && sides(s.outset, length),
           fill: s.fill && paint(s.fill),
           stroke: s.stroke && sides(s.stroke, stroke),
-          radius: s.radius && length(s.radius),
+          radius: s.radius && radius(s.radius),
         },
         inlines(node.children),
       );
@@ -258,12 +258,13 @@ function setEdgeMargin(b: Block, side: Edge, value: Length | undefined): void {
   }
 }
 
-function imageCall(n: { src: string; width?: Size; height?: Size; alt?: string }): string {
+function imageCall(n: { src: string; width?: Size; height?: Size; alt?: string; fit?: string }): string {
   return call(
     "image",
     {
       width: n.width && size(n.width),
       height: n.height && size(n.height),
+      fit: n.fit && str(n.fit),
       alt: n.alt === undefined ? undefined : str(n.alt),
     },
     str(n.src),
@@ -461,7 +462,8 @@ function boxBlock(s: BoxStyle, children: Block[]): string {
     inset: s.inset && sides(s.inset, length),
     fill: s.fill && paint(s.fill),
     stroke: s.stroke && sides(s.stroke, stroke),
-    radius: s.radius && length(s.radius),
+    radius: s.radius && radius(s.radius),
+    clip: s.clip ? "true" : undefined,
   };
   let b = s.image ? withBackground(s, args, spacing, body) : call("block", { ...args, ...spacing }, body);
   if (s.shadows?.length) b = shadowed(b, s);
@@ -512,7 +514,9 @@ function balancedColumns(count: number, gutter: string, body: string): string {
 }
 
 function shadowed(block: string, style: BoxStyle): string {
-  const radius = style.radius ? length(style.radius) : "0pt";
+  // Shadow layers grow uniformly; with uneven corners the top-left one stands for all.
+  const r = style.radius && ("unit" in style.radius ? style.radius : style.radius.topLeft);
+  const radius = r ? length(r) : "0pt";
   const layers = (style.shadows ?? []).flatMap((sh: Shadow) => {
     const steps = sh.blur.value > 0 ? BLUR_STEPS : 1;
     return Array.from({ length: steps }, (_, i) => {

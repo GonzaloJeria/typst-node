@@ -58,6 +58,27 @@ describe.skipIf(!hasTypst)("PdfRenderer", () => {
   });
 });
 
+describe.skipIf(!hasTypst)("@font-face", () => {
+  // Without the bundled fonts, Inter is only reachable through @font-face.
+  const renderer = new PdfRenderer({ bundledFonts: false, defaults: { assets: { baseDir: bundledFontsDir } } });
+  afterAll(() => renderer.dispose());
+  const css = (src: string) => `<style>@font-face { font-family: Brand; src: url(${src}) format("truetype") } p { font-family: Brand }</style>`;
+
+  it("loads the font and maps the CSS family to the name inside the file", async () => {
+    const r = await renderer.render(`${css("Inter-Bold.ttf")}<p>Hola</p>`);
+    expect(r.warnings).toEqual([]);
+    expect(r.diagnostics).toEqual([]);
+    expect(r.source).toContain('font: ("Inter",)');
+  });
+
+  it("warns about WOFF fonts and missing files", async () => {
+    const woff = await renderer.render(`<style>@font-face { font-family: W; src: url(a.woff2) format("woff2") }</style><p>x</p>`);
+    expect(woff.warnings).toContain("@font-face W ignored: only TTF and OTF fonts are supported (not WOFF/WOFF2)");
+    const missing = await renderer.render(`${css("nope.ttf")}<p>x</p>`, { assets: { onError: "skip" } });
+    expect(missing.warnings[0]).toMatch(/^Cannot load font Brand \(nope\.ttf\)/);
+  });
+});
+
 describe("bundled fonts", () => {
   it("ships Inter in bundledFontsDir", () => {
     expect(readdirSync(bundledFontsDir)).toEqual(expect.arrayContaining(["Inter-Regular.ttf", "Inter-Bold.ttf", "OFL.txt"]));
