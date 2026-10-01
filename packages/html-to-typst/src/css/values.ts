@@ -7,7 +7,7 @@ export interface LengthContext {
   fontSize: number;
   /** Root font size, in pt. */
   rootFontSize: number;
-  /** Page box in pt, for viewport units (default: A4). */
+  /** Page area in pt, for viewport units (default: A4). */
   viewport?: { width: number; height: number };
 }
 
@@ -49,7 +49,7 @@ export function parseLength(value: string, ctx: LengthContext): Length | undefin
     case "lh": return { value: n * ctx.fontSize * 1.2, unit: "pt" };
     case "rlh": return { value: n * ctx.rootFontSize * 1.2, unit: "pt" };
   }
-  // Viewport units: the viewport is the page box when printing.
+  // Viewport units: when printing, the viewport is the page area (inside the margins).
   const vp = ctx.viewport ?? A4_PT;
   const viewport: Record<string, number> = {
     vw: vp.width, svw: vp.width, lvw: vp.width, dvw: vp.width, vi: vp.width,
@@ -74,7 +74,9 @@ function parseCalc(expr: string, ctx: LengthContext): Length | undefined {
   return { value: round4(q.pct), unit: "%", offset: round4(q.n) };
 }
 
-function evalCalc(expr: string, ctx: LengthContext): { n: number; pct: number; dim: boolean } | undefined {
+function evalCalc(rawExpr: string, ctx: LengthContext): { n: number; pct: number; dim: boolean } | undefined {
+  // `calc(infinity * 1px)` (Tailwind's `rounded-full`): any large value does, radii are clamped.
+  const expr = rawExpr.replace(/(^|[\s(*/+-])infinity\b/gi, "$11e5");
   const tokens = expr.match(/[-+]?\d*\.?\d+(?:e[-+]?\d+)?[a-z%]*|[a-z-]+\(|[-+*/(),]/gi);
   if (!tokens || tokens.join("").length !== expr.replace(/\s+/g, "").length) return undefined;
   // A sign glued to a number after an operand is a binary operator (`1px -2px` is invalid CSS anyway).
@@ -300,6 +302,12 @@ export function parseGradient(value: string): Gradient | undefined {
   if (!m) return undefined;
   const args = splitArgs(m[2]!);
   let angle = 180;
+  // The interpolation color space (`to right in oklab`, Tailwind v4) is Typst's default anyway.
+  if (args[0] !== undefined) {
+    const stripped = args[0].replace(/(?:^|\s+)in\s+[a-z-]+(?:\s+(?:shorter|longer|increasing|decreasing)\s+hue)?\s*$/i, "").trim();
+    if (stripped) args[0] = stripped;
+    else args.shift();
+  }
   if (m[1] === "linear" && args[0] !== undefined) {
     const first = args[0].trim().toLowerCase().replace(/\s+/g, " ");
     const deg = /^(-?\d*\.?\d+)(deg|turn|rad|grad)$/.exec(first);

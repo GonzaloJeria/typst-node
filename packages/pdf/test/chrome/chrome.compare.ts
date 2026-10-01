@@ -20,7 +20,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { createRequire } from "node:module";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { bundledFontsDir, PdfRenderer } from "../../src/index.js";
+import { bundledFontsDir, PdfRenderer, tailwindCss } from "../../src/index.js";
 import { decodePng, encodePng, type Image } from "../visual/png.js";
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
@@ -49,25 +49,23 @@ function findChromium(): string | undefined {
   return undefined;
 }
 
-/** Inlines the stylesheets fixtures reference by name. */
-function inlineStyles(html: string, name: string): string {
+/**
+ * Inlines the stylesheets fixtures reference by name. Tailwind is compiled
+ * with the bundled compiler (`tailwind: true`), so Chrome and the library get
+ * the same CSS users get.
+ */
+async function inlineStyles(html: string): Promise<string> {
+  const tw = /<link rel="stylesheet" href="tailwind">/.test(html) ? (await tailwindCss(html)).css : "";
   return html.replace(/<link rel="stylesheet" href="(tailwind|bootstrap)">/g, (_, lib: string) => {
-    const css = lib === "bootstrap" ? readFileSync(require.resolve("bootstrap/dist/css/bootstrap.css"), "utf8") : tailwind(html, name);
+    const css = lib === "bootstrap" ? readFileSync(require.resolve("bootstrap/dist/css/bootstrap.css"), "utf8") : tw;
     return `<style>\n${css}\n</style>`;
   });
 }
 
-function tailwind(html: string, name: string): string {
-  const dir = path.join(REPORT, ".tailwind", name);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "page.html"), html);
-  writeFileSync(path.join(dir, "in.css"), `@import "tailwindcss" source(none);\n@source "./page.html";\n`);
-  const cli = path.join(ROOT, "node_modules/.bin/tailwindcss");
-  execFileSync(cli, ["-i", path.join(dir, "in.css"), "-o", path.join(dir, "out.css")], { cwd: ROOT, stdio: "pipe" });
-  return readFileSync(path.join(dir, "out.css"), "utf8");
-}
-
-/** Makes Chromium use the library's bundled Inter wherever a sans-serif font is asked for. */
+/**
+ * Makes Chromium use the library's bundled Inter wherever a sans-serif font is
+ * asked for, and DejaVu Serif (which the library is also given) for serif.
+ */
 function fontconfig(): string {
   const file = path.join(REPORT, "fonts.conf");
   const sans = ["sans-serif", "sans", "Sans", "system-ui", "ui-sans-serif", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto",
@@ -83,9 +81,13 @@ function fontconfig(): string {
   <cachedir>${path.join(REPORT, ".fccache")}</cachedir>
   ${alias(sans, "Inter")}
   ${alias(mono, "DejaVu Sans Mono")}
+  ${alias(SERIF, "DejaVu Serif")}
 </fontconfig>`);
   return file;
 }
+
+const SERIF = ["serif", "ui-serif", "Georgia", "Cambria", "Times New Roman", "Times", "Liberation Serif"];
+const DEJAVU = "/usr/share/fonts/truetype/dejavu";
 
 /** Rasterizes a PDF with Typst, which can embed PDF pages as images. */
 function rasterizePdf(pdf: Uint8Array, name: string): Uint8Array[] {
@@ -188,7 +190,11 @@ const results: Record<string, number[]> = {};
 
 describe.skipIf(!CHROMIUM)("output compared with Chrome", () => {
   let browser: import("playwright-core").Browser;
-  const renderer = new PdfRenderer({ cli: { creationTimestamp: 0 } });
+  // Same serif font as Chromium (Libertinus, the library's default, is not a system font).
+  const renderer = new PdfRenderer({
+    cli: { creationTimestamp: 0, fonts: [{ dir: DEJAVU }] },
+    defaults: { genericFamilies: { serif: ["DejaVu Serif"] } },
+  });
 
   beforeAll(async () => {
     mkdirSync(REPORT, { recursive: true });
@@ -206,7 +212,7 @@ describe.skipIf(!CHROMIUM)("output compared with Chrome", () => {
 
   it.each(fixtures)("%s", async (file) => {
     const name = file.replace(/\.html$/, "");
-    const html = inlineStyles(readFileSync(path.join(FIXTURES, file), "utf8"), name);
+    const html = await inlineStyles(readFileSync(path.join(FIXTURES, file), "utf8"));
 
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });

@@ -13,6 +13,7 @@ import {
 import { fileURLToPath } from "node:url";
 import { resolveFonts } from "./fonts.js";
 import { resolveAssets, type AssetOptions } from "./assets.js";
+import { tailwindCss } from "./tailwind.js";
 
 /**
  * Directory with the fonts shipped in this package (Inter, SIL OFL), which
@@ -24,6 +25,12 @@ export const bundledFontsDir = fileURLToPath(new URL("../fonts", import.meta.url
 
 export interface RenderOptions extends TranspileOptions {
   assets?: AssetOptions;
+  /**
+   * Generate Tailwind CSS v4 for the classes the HTML uses (bundled, nothing
+   * to install). `<style>` blocks and `css` go through Tailwind too, so they
+   * can use `@theme`, `@apply` and `@utility`. Default: false.
+   */
+  tailwind?: boolean;
   /** Extra fonts for this render. */
   fonts?: readonly FontSource[];
   timeoutMs?: number;
@@ -139,7 +146,8 @@ function defaultBackend(options: PdfRendererOptions): TypstBackend {
   return new CliBackend(withFonts({}));
 }
 
-async function prepare(input: RenderInput, opts: RenderOptions): Promise<Prepared> {
+async function prepare(rawInput: RenderInput, rawOpts: RenderOptions): Promise<Prepared> {
+  const { input, opts, warnings: tailwindWarnings } = rawOpts.tailwind ? await withTailwind(rawInput, rawOpts) : { input: rawInput, opts: rawOpts, warnings: [] };
   const transpile = (o: RenderOptions) => (typeof input === "string" ? htmlToTypst(input, o) : composeToTypst(input, o));
   let transpiled = transpile(opts);
   const fonts = await resolveFonts(transpiled.fontFaces, opts.assets, opts.signal);
@@ -155,8 +163,43 @@ async function prepare(input: RenderInput, opts: RenderOptions): Promise<Prepare
     source: emitDocument(transpiled.document),
     files: assets.files,
     fonts: fonts.fonts,
-    warnings: [...transpiled.warnings, ...fonts.warnings, ...assets.warnings],
+    warnings: [...tailwindWarnings, ...transpiled.warnings, ...fonts.warnings, ...assets.warnings],
   };
+}
+
+/** Moves `<style>` blocks out of the HTML, so their CSS can go through Tailwind. */
+function takeStyles(html: string): { html: string; css: string[] } {
+  const css: string[] = [];
+  const rest = html.replace(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi, (_, body: string) => (css.push(body), ""));
+  return { html: rest, css };
+}
+
+/** Compiles Tailwind into the CSS of the document, or of each section. */
+async function withTailwind(input: RenderInput, opts: RenderOptions): Promise<{ input: RenderInput; opts: RenderOptions; warnings: string[] }> {
+  const baseDir = opts.assets?.baseDir;
+  if (typeof input === "string") {
+    const { html, css } = takeStyles(input);
+    const tw = await tailwindCss(html, [...css, opts.css ?? ""].join("\n"), baseDir ? { baseDir } : {});
+    return { input: html, opts: { ...opts, css: tw.css }, warnings: tw.warnings };
+  }
+  const warnings: string[] = [];
+  const sections = await Promise.all(
+    input.sections.map(async (section, i) => {
+      const page = { ...input.layout?.page, ...section.page };
+      const { html, css } = takeStyles(section.html);
+      // Header and footer HTML is placed on the section's pages: their classes count too.
+      const decoration = [page.header, page.footer].filter((v): v is string => typeof v === "string").join("\n");
+      const size = page.size ? `@page { size: ${page.size} }` : "";
+      const source = [size, input.layout?.css ?? "", section.css ?? "", ...css, opts.css ?? ""].join("\n");
+      const tw = await tailwindCss(`${html}\n${decoration}`, source, baseDir ? { baseDir } : {});
+      const label = input.sections.length > 1 ? `[section ${i + 1}] ` : "";
+      warnings.push(...tw.warnings.map((w) => label + w));
+      return { ...section, html, css: tw.css };
+    }),
+  );
+  const { css: _layoutCss, ...layout } = input.layout ?? {};
+  const { css: _css, ...rest } = opts;
+  return { input: { ...input, layout, sections }, opts: rest, warnings };
 }
 
 function compileExtras(opts: RenderOptions, documentFonts: Uint8Array[] = []) {

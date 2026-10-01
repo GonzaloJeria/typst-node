@@ -5,6 +5,7 @@ Generación de PDF en Node.js sin navegador: HTML/CSS → Typst → PDF.
 | Paquete | Estado |
 |---|---|
 | [`@gjeria/typst-compiler`](packages/typst-compiler) | `TypstBackend` + `CliBackend` (binario oficial de Typst por documento) + `SidecarBackend` (procesos Typst persistentes); cero dependencias de runtime |
+| [`@gjeria/pdf-templates`](packages/templates) | Templates Handlebars + Tailwind desde archivos o base de datos, Google Fonts, y la CLI `typst-pdf` con vista previa en vivo |
 | [`@gjeria/typst-html-pdf`](packages/pdf) | Fachada `htmlToPdf()` / `PdfRenderer`: transpila, resuelve imágenes (data URI, archivos locales acotados a `baseDir`, HTTP con protección SSRF) y compila |
 | [`typst-sidecar`](crates/typst-sidecar) | Binario Rust propio sobre los crates oficiales de Typst: compila por JSON sobre stdin/stdout sin reiniciar entre documentos |
 | [`@gjeria/html-to-typst`](packages/html-to-typst) | HTML/CSS → IR → Typst: parse5, cascada CSS propia (selectores, especificidad, herencia, shorthands, `@page`, `@media print`), tablas con rowspan/colspan, flex/grid básicos, saltos de página |
@@ -126,6 +127,245 @@ const { pdf, warnings } = await typst.compile({
   inputs: { name: "Ada" },
 });
 ```
+
+## Guía de uso y buenas prácticas
+
+**¿Generas PDFs desde templates?** (HTML con variables, guardado en archivos o
+en la base de datos). Usa [`@gjeria/pdf-templates`](packages/templates): se
+encarga de Handlebars, Tailwind, Google Fonts y los `<script>`/`<link>` del
+HTML, y trae la vista previa en vivo:
+
+```sh
+npm i @gjeria/pdf-templates
+npx typst-pdf new factura && npx typst-pdf dev
+```
+
+```ts
+import { createTemplates } from "@gjeria/pdf-templates";
+
+const templates = createTemplates({ source: async (nombre) => db.plantillas.findOne({ nombre }) });
+const { pdf } = await templates.render("orden-de-compra", datos);
+```
+
+Lo que sigue describe la librería base, `@gjeria/typst-html-pdf`. Las reglas
+básicas:
+
+1. **Un `PdfRenderer` por proceso**, creado al arrancar, nunca uno por
+   request: cada uno levanta sus propios procesos de Typst.
+2. **`await renderer.warmup()`** antes de aceptar tráfico, para que el primer
+   PDF no pague el arranque.
+3. **`renderer.dispose()`** al apagar (`SIGTERM`), para cerrar los procesos.
+4. **Prefiere Tailwind** (`tailwind: true`), que da el resultado más fiel a
+   Chrome. El resto del CSS va en el HTML (`<style>`) o en la opción `css`: la
+   librería no ejecuta JavaScript ni descarga `<link rel="stylesheet">`.
+5. **Revisar `warnings`** mientras desarrollas: lista cada propiedad o valor
+   que se descartó o aproximó. En tests, `strict: true` convierte esos
+   warnings en error.
+6. **Escapar los datos** que insertas en el HTML (nombres, direcciones,
+   descripciones): usa un motor de plantillas que escape (Handlebars,
+   EJS con `<%= %>`, JSX/`renderToStaticMarkup`) o escapa tú `& < > " '`.
+
+### Opciones
+
+```ts
+const renderer = new PdfRenderer({
+  // Backend: por defecto el sidecar (procesos Typst persistentes, el más rápido).
+  sidecar: {
+    processes: 2,                    // documentos en paralelo; por defecto, nº de CPUs (~60 MB c/u)
+    timeoutMs: 15_000,               // por documento; el proceso que se pasa se reinicia
+    maxCompilationsPerProcess: 500,  // recicla procesos para acotar la memoria
+    fonts: [{ dir: "/app/fonts" }],  // fuentes para todos los documentos
+    creationTimestamp: 0,            // fecha fija: PDFs idénticos byte a byte (tests)
+  },
+  bundledFonts: true,                // Inter como sans-serif (por defecto)
+  defaults: {                        // se mezclan con las opciones de cada render
+    css: baseCss,                    // CSS aplicado después del <style> del documento
+    rootFontSize: 12,                // tamaño raíz en pt (16px del navegador = 12pt)
+    tailwind: true,                  // Tailwind CSS v4 incluido: CSS para las clases del HTML
+    strict: false,
+    genericFamilies: { "sans-serif": ["Inter"], serif: ["Libertinus Serif"] },
+    fontAliases: { "Mi Marca": "MiMarca Sans" },
+    assets: {
+      baseDir: "/app/templates",     // rutas relativas y file: (sin baseDir se rechazan)
+      allowRemote: true,             // http(s): imágenes y @font-face; NO hojas de estilo
+      allowedHosts: ["cdn.miempresa.com", /\.amazonaws\.com$/],
+      timeoutMs: 10_000,
+      maxAssetBytes: 10 * 1024 * 1024,
+      maxTotalBytes: 50 * 1024 * 1024,
+      onError: "skip",               // imagen que falla: warning en vez de error
+      resolve: async (src) => undefined, // resolver propio (S3, BD…); undefined = el normal
+    },
+  },
+});
+```
+
+Cada llamada acepta las mismas opciones (`renderer.render(html, { css, assets,
+fonts, timeoutMs, signal })`) y se combinan con `defaults`: el `css` se
+concatena, `assets` y `fonts` se mezclan.
+
+El resultado trae `pdf` (`Uint8Array`), `warnings` (lo que el transpilador
+descartó o aproximó), `diagnostics` (avisos del compilador Typst) y `source`
+(el Typst generado, útil para depurar).
+
+### Casos de uso
+
+**HTML suelto.** Si no hay `<html>`/`<head>`, igual funciona: el CSS va en la
+opción `css`.
+
+```ts
+const { pdf } = await renderer.render("<h1>Hola</h1><p>Mundo</p>", { css: "h1 { color: #2563eb }" });
+```
+
+**Tamaño y márgenes de página.** Sin `@page { margin }` la página no tiene
+margen, como en el `page.pdf()` de Puppeteer y Playwright; los encabezados y
+pies de página (cajas `@top-*`/`@bottom-*` o `header`/`footer` de las
+secciones) reservan un margen por defecto. Con CSS estándar:
+
+```css
+@page { size: A4; margin: 20mm 15mm }          /* también letter, A4 landscape, 210mm 297mm */
+@page { @bottom-center { content: "Página " counter(page) " de " counter(pages) } }
+.salto { break-before: page }                   /* o page-break-before: always */
+tr, .tarjeta { break-inside: avoid }
+```
+
+**Encabezado con logo en cada página.** Con `position: running()`:
+
+```html
+<style>
+  .header { position: running(header) }
+  @page { margin-top: 30mm; @top-center { content: element(header) } }
+</style>
+<div class="header"><img src="logo.svg" style="height: 12mm"></div>
+```
+
+O con secciones (ver [Plantillas y secciones](#plantillas-y-secciones)), que
+además permiten portada sin encabezado y CSS distinto por parte.
+
+**Tailwind CSS v4 (recomendado).** Viene incluido: no hay nada que instalar.
+Con `@gjeria/pdf-templates` está activado por defecto; con la librería base
+se activa con `tailwind: true`:
+
+```ts
+const html = `<div class="p-8 text-slate-800"><h1 class="text-2xl font-bold text-blue-600">Factura</h1></div>`;
+const { pdf, warnings } = await renderer.render(html, { tailwind: true });
+```
+
+Se genera CSS solo para las clases que usa el HTML. Los `<style>` del
+documento y la opción `css` pasan por Tailwind, así que pueden usar `@theme`,
+`@apply` y `@utility`. El `<script>` del CDN de Tailwind se ignora, porque el
+CSS ya está generado. `warnings` avisa de lo que no funciona en papel:
+
+- clases que no existen (`txt-red-500`)
+- breakpoints más anchos que la página (`lg:` en A4, que mide 794 px)
+- estados como `hover:` o `dark:`
+
+`print:` siempre aplica. No se soportan `@plugin` ni `tailwind.config.js`,
+porque toda la configuración va en CSS. Para usarlo en otro flujo, la librería
+exporta `tailwindCss(html, css)`.
+
+**Bootstrap 5.** Lee el CSS del paquete y pásalo tal cual:
+
+```ts
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+
+const bootstrapCss = readFileSync(createRequire(import.meta.url).resolve("bootstrap/dist/css/bootstrap.min.css"), "utf8");
+const renderer = new PdfRenderer({ defaults: { css: bootstrapCss } });
+```
+
+**Breakpoints.** `@media` se evalúa contra el ancho de la página, como Chrome
+al imprimir: A4 vertical mide ~794px, así que aplican `sm:` (640px) y `md:`
+(768px) pero no `lg:` (1024px) ni mayores; en Bootstrap aplican `-sm` y `-md`.
+`print:` y `@media print` aplican; `hover:`, `focus:` y `dark:` no.
+
+**Imágenes.** `data:` URI siempre funcionan; rutas relativas con
+`assets.baseDir`; URLs con `allowRemote` (mejor con `allowedHosts`). Para
+imágenes privadas (S3, base de datos), `resolve` devuelve los bytes:
+
+```ts
+assets: {
+  resolve: async (src) => (src.startsWith("s3://") ? await descargarDeS3(src) : undefined),
+}
+```
+
+**Fuentes propias.** Con `@font-face` en el CSS (TTF/OTF; ver
+[Fuentes incluidas](#fuentes-incluidas)), o para todos los documentos con
+`sidecar.fonts: [{ dir: "/app/fonts" }]` y luego `font-family: "Nombre"`.
+
+**Vista previa como imagen.** `renderPages` devuelve un PNG (o SVG) por
+página:
+
+```ts
+const { pages } = await renderer.renderPages(html, { format: "png", ppi: 96 });
+```
+
+**Script o tarea suelta.** `htmlToPdf(html, opciones)` usa un renderer
+compartido; llama a `disposeDefaultRenderer()` al terminar.
+
+**Cancelar.** `signal` corta la descarga de imágenes y la compilación:
+
+```ts
+await renderer.render(html, { signal: AbortSignal.timeout(20_000) });
+```
+
+### Errores
+
+| Error | Cuándo |
+|---|---|
+| `TranspileError` (`err.name`) | `strict: true` y el HTML usa algo no soportado; `err.warnings` lo lista |
+| `AssetError` | una imagen o fuente no se pudo cargar (host no permitido, 404, tamaño) y `onError` es `throw` |
+| `TypstCompileError` | Typst no pudo compilar (no debería pasar con HTML; repórtalo con `source`) |
+| `TypstTimeoutError` | el documento superó `timeoutMs` |
+
+### Servir el PDF por HTTP
+
+Devuelve los bytes, no base64 (pesa un 33 % más y obliga al cliente a
+decodificar):
+
+```ts
+res.setHeader("Content-Type", "application/pdf");
+res.setHeader("Content-Disposition", 'inline; filename="factura.pdf"');
+res.end(Buffer.from(pdf));
+```
+
+### Lo que no funciona (y qué hacer)
+
+| En el navegador | Aquí |
+|---|---|
+| `<script>`, CDN de Tailwind | `tailwind: true` (o `@gjeria/pdf-templates`) |
+| `<link rel="stylesheet">` | leer el archivo y pasarlo en `<style>` o `css` |
+| formularios, video, canvas, iframe | se omiten con warning; usa texto o imágenes |
+| `:hover`, modo oscuro | nunca aplican en papel |
+| WOFF/WOFF2 | convertir a TTF/OTF |
+| `float` | usar flex o grid |
+
+Ver [Soporte de HTML/CSS](#soporte-de-htmlcss) para el detalle.
+
+## Migrar desde Puppeteer o Playwright
+
+| Puppeteer / Playwright | typst-node |
+|---|---|
+| `browser.newPage()` + `page.setContent(html)` + `page.pdf()` | `renderer.render(html)` (un `PdfRenderer` por proceso) |
+| `page.pdf({ format: "A4", margin })` | `@page { size: A4; margin: 15mm }` en el CSS, o `page` en secciones/templates |
+| `displayHeaderFooter`, `headerTemplate`, `footerTemplate` | `page.header` / `page.footer` (con `{{page}}` y `{{pages}}`), o `@top-center`/`@bottom-center` |
+| `<script src="https://cdn.tailwindcss.com">` | `tailwind: true` (incluido) o `@gjeria/pdf-templates` |
+| `<link rel="stylesheet" href="…">` | el CSS en `<style>`, la opción `css`, o una hoja local en un template |
+| `printBackground: true` | siempre activo |
+| `page.waitForNetworkIdle()` / imágenes remotas | `assets: { allowRemote: true, allowedHosts: [...] }` (se descargan antes de compilar) |
+| JavaScript que arma el HTML en el navegador (gráficos, `document.write`) | genera el HTML en Node (Handlebars, JSX) y los gráficos como SVG |
+| `emulateMediaType("print")` | siempre es impresión: `@media print` y `print:` aplican |
+
+Diferencias a tener en cuenta:
+
+- **Sin `@page { margin }`, la página no tiene margen**, igual que `page.pdf()`
+  sin `margin`. Si antes pasabas `margin` en `page.pdf()`, ponlo en `@page`.
+- **No hay JavaScript.** Lo que en el navegador calcula un script (totales,
+  gráficos con Chart.js) se calcula antes, en Node.
+- **Fuentes:** `sans-serif` es Inter (incluida); las demás se declaran con
+  `@font-face` (TTF/OTF) o con un `<link>` a Google Fonts en
+  `@gjeria/pdf-templates`.
+- **Revisa `warnings`:** lista todo lo que no se pudo representar, en vez de
+  fallar en silencio.
 
 ## En producción
 
@@ -265,7 +505,7 @@ variables), anidado de reglas (`&`), selectores nivel 4 (`:is()`, `:where()`,
 `:not()`, `:has()`, `+`, `~`, `:nth-child(An+B of S)`, `:*-of-type`,
 `:empty`, clases escapadas como `.md\:flex` o `.w-1\/2`), colores
 `oklch()`/`oklab()`/`lab()`/`lch()`/`hwb()`/`color()`/`color-mix()`,
-`min()`/`max()`/`clamp()`, unidades `vw`/`vh` (relativas a la página),
+`min()`/`max()`/`clamp()`, unidades `vw`/`vh` (relativas al área de la página, dentro de los márgenes),
 `ch`/`ex`/`lh`, propiedades lógicas (`padding-inline`, `margin-block-start`,
 `inset-inline`…), el shorthand `font`, `box-sizing` en anchos y altos,
 `grid-template-columns` con `repeat()` y `minmax()`, y texto suelto dentro de
@@ -281,13 +521,19 @@ lista; `flex-wrap: wrap` (ítems en `%` se reparten en filas, como la grilla
 `.row`/`.col-*` de Bootstrap; los demás fluyen y saltan de línea, como
 etiquetas o chips); `flex-direction: column` con `align-items` y `gap`;
 `row-gap`/`column-gap`; `calc()` que mezcla `%` con longitudes
-(`calc(100% - 2rem)`). Estados interactivos (`:hover`, `:focus`…) nunca aplican en papel y
+(`calc(100% - 2rem)`); `justify-content` en columnas flex con alto o
+`min-height` (un pie de página empujado al final con `justify-between`);
+`min-height` que deja al contenido usar el alto libre; filas de tabla con
+altura, tablas con ancho propio, bordes en `<tr>` y padding distinto por
+celda. Estados interactivos (`:hover`, `:focus`…) nunca aplican en papel y
 no generan warnings. Si un valor no se puede renderizar y la regla traía un
 fallback (`display: block; display: -webkit-box`), se usa el fallback.
 
 **Posicionamiento y efectos:** `position: absolute` (anclado a la esquina que
 indiquen `top`/`right`/`bottom`/`left`, dentro del ancestro posicionado más
-cercano), `position: relative` con desplazamientos (también en línea),
+cercano), `position: relative` con desplazamientos (también en línea); los hijos
+`absolute` se miden desde el borde interior del padding y no cuentan como
+ítems flex/grid;
 `position: fixed` (se repite en cada página, relativo al área dentro de los márgenes, como al
 imprimir en un navegador; con `left` y `right` ocupa el ancho entre ambos); `<svg>` inline;
 `transform` con `rotate`, `scale` y `translate`; `box-shadow` exterior con
@@ -320,7 +566,7 @@ fluye columna a columna entre páginas). Ideal para términos y condiciones.
 inline, combinables con `auto`) y `line-height` (número, %, longitud;
 `normal` ≈ 1.2).
 
-**Todavía no:** `justify-content` en columnas flex, `min()`/`max()` que
+**Todavía no:** `min()`/`max()` que
 comparan `%` con longitudes, `@container`, fuentes WOFF/WOFF2, `float`, fondos repetidos (`repeat`) o con varias capas, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
 márgenes o tamaño distintos en `@page :first`, `@page :left/:right`,
 `@page nombre:first`, `column-width`, `column-rule`, `column-span`.
@@ -358,11 +604,22 @@ dibujo de cada letra.
 - Las imágenes lado a lado (Chrome | librería | diferencia) y los warnings quedan en `test/chrome/__report__/`.
 - No corre en CI (necesita Chromium); se salta sola si no lo encuentra (`CHROMIUM_PATH` para indicar la ruta).
 
-| Plantilla | 0.1.1 | Ahora |
+| Plantilla | 0.1.1 | 0.2.0 |
 | --- | --- | --- |
-| Tailwind v4 (factura) | 81,8 % | 98,4 % |
-| HTML simple, sin framework | 72,8 % | 94,8 % |
-| CSS moderno (capas, anidado, `oklch`) | 75,6 % | 90,0 % |
-| Bootstrap 5 (reporte) | 67,5 % | 84,4 % |
-| Flex con `wrap`, columnas y `calc()` | 49,4 % | 82,1 % |
-| Efectos (esquinas, `overflow`, `object-fit`, sombras) | — | 76,7 % |
+| Tailwind: factura | 81,8 % | 100 % |
+| Tailwind: boleta térmica (80 mm) | — | 99,4 % |
+| Tailwind: cotización (degradado, tarjetas, badges) | — | 98,6 % |
+| Tailwind: estado de cuenta, 4 páginas (tabla larga, encabezado repetido) | — | 99,1 · 98,4 · 97,7 · 90,6 % |
+| Tailwind: reporte (KPIs, gráfico SVG, barras) | — | 97,4 % |
+| Tailwind: orden de compra (sin `@page`) | — | 97,2 % |
+| Tailwind: certificado (A4 horizontal, serif) | — | 94,7 % |
+| Tailwind: carta (texto corrido, serif) | — | 88,8 % |
+| HTML simple, sin framework | 72,8 % | 99,8 % |
+| Bootstrap 5 (reporte) | 67,5 % | 98,9 % |
+| CSS moderno (capas, anidado, `oklch`) | 75,6 % | 98,4 % |
+| Flex con `wrap`, columnas y `calc()` | 49,4 % | 98,3 % |
+| Efectos (esquinas, `overflow`, `object-fit`, sombras) | — | 95,9 % |
+
+Lo que más resta hoy son los cortes de línea en texto corrido largo (la carta):
+cada motor mide el texto con pequeñas diferencias y una palabra puede pasar a
+la línea siguiente.

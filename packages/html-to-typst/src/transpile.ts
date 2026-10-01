@@ -71,7 +71,8 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   const htmlEl = findFirst(doc, "html")!;
   const body = findFirst(doc, "body")!;
   const rootFontSize = options.rootFontSize ?? 12;
-  const cascade = new Cascade(sheet, rootFontSize, pageMedia(sheet.page, rootFontSize));
+  const media = pageMedia(sheet.page, rootFontSize);
+  const cascade = new Cascade(sheet, rootFontSize, media, pageArea(sheet.page, media, rootFontSize, hasMarginBoxes(sheet)));
   const converter = new Converter(cascade, options);
 
   const htmlStyle = converter.style(htmlEl, undefined);
@@ -102,6 +103,9 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
       converter.warnings.add(`@page ${side} margin boxes are not drawn: margin-${side} is 0`);
     }
   }
+  // Without `@page { margin }` the page has none, as in Chrome's page.pdf()
+  // (Puppeteer, Playwright), unless there are margin boxes to make room for.
+  if (!hasMarginBoxes(sheet)) page.margin = { ...NO_MARGIN, ...page.margin };
   const first = sheet.namedPages[":first"];
   if (first) {
     const setup = pageSetup(first.page, ctx, converter.warnings, true);
@@ -215,6 +219,25 @@ function pageMedia(decls: Declaration[], rootFontSize: number): MediaContext {
   if (page.width) [w, h] = [pt(page.width) ?? w, pt(page.height) ?? h];
   if (page.flipped) [w, h] = [h, w];
   return { width: (w * 4) / 3, height: (h * 4) / 3 };
+}
+
+function hasMarginBoxes(sheet: Stylesheet): boolean {
+  return Object.keys({ ...sheet.pageBoxes, ...sheet.namedPages[":first"]?.pageBoxes }).length > 0;
+}
+
+const ZERO: Length = { value: 0, unit: "pt" };
+const NO_MARGIN = { top: ZERO, right: ZERO, bottom: ZERO, left: ZERO };
+
+/** The page area in pt (the page box minus its margins): what viewport units measure when printing. */
+function pageArea(decls: Declaration[], media: MediaContext, rootFontSize: number, boxes: boolean): { width: number; height: number } {
+  const m = pageSetup(decls.filter((d) => /^margin/.test(d.property)), { fontSize: rootFontSize, rootFontSize }, new Set())?.margin ?? {};
+  // Typst's default margin (2.5/21 of the shorter side) where margin boxes need room.
+  const fallback = boxes ? ((2.5 / 21) * Math.min(media.width, media.height) * 3) / 4 : 0;
+  const pt = (l: Length | undefined) => (l ? toPt(l) ?? 0 : fallback);
+  return {
+    width: (media.width * 3) / 4 - pt(m.left) - pt(m.right),
+    height: (media.height * 3) / 4 - pt(m.top) - pt(m.bottom),
+  };
 }
 
 function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<string>, first = false): PageSetup | undefined {

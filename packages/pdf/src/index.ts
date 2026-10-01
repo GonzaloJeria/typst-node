@@ -10,6 +10,7 @@ export {
   type RenderOptions,
 } from "./render.js";
 export { bundledFontsDir } from "./render.js";
+export { classCandidates, pageWidth, tailwindCss, type TailwindOptions, type TailwindResult } from "./tailwind.js";
 export { AssetError, resolveAssets, sniffImage, type AssetOptions, type ResolvedAssets } from "./assets.js";
 export { fontFamilyName, resolveFonts, type ResolvedFonts } from "./fonts.js";
 export { isPrivateAddress } from "./net.js";

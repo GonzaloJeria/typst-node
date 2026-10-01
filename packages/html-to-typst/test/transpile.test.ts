@@ -78,7 +78,8 @@ describe("cascade", () => {
     expect(b).toMatchObject({
       kind: "box",
       style: {
-        inset: { top: { value: 3 }, left: { value: 6 } },
+        // The 1px left border adds to the 8px padding; the top has no border.
+        inset: { top: { value: 3 }, left: { value: 6.75 } },
         stroke: { right: { width: { value: 0.75 }, color: "#ff0000" } },
       },
     });
@@ -166,9 +167,11 @@ describe("tables", () => {
        <tr><td>a</td><td class="hl" style="text-align: right">b</td></tr></table>`,
       "td { border: 1px solid #000; padding: 8px } .hl { background: #eee }",
     )[0] as Extract<Block, { kind: "table" }>;
-    expect(t.columns).toEqual([{ value: 30, unit: "%" }, { value: 1, unit: "fr" }]);
+    expect(t.columns).toEqual([{ value: 30, unit: "%" }, "auto"]);
+    expect(t.fillAuto).toBe(true);
     expect(t.stroke).toEqual({ width: { value: 0.75, unit: "pt" }, color: "#000000" });
-    expect(t.inset).toEqual({ value: 6, unit: "pt" });
+    // 8px padding, plus half of the collapsed 1px borders above and below each row.
+    expect(t.inset).toEqual({ top: { value: 6.375, unit: "pt" }, right: { value: 6, unit: "pt" }, bottom: { value: 6.375, unit: "pt" }, left: { value: 6, unit: "pt" } });
     expect(t.body[0]!.cells[1]).toMatchObject({ align: "right", fill: "#eeeeee" });
   });
 

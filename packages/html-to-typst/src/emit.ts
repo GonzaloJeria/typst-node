@@ -29,7 +29,10 @@ export function emitDocument(doc: Document): string {
   lines.push("#show heading: it => it.body");
   // Typst drops spacing at the start of the page; CSS keeps the first block's
   // top margin (it does not collapse through the page). An empty block keeps it.
-  lines.push(`#${seq(["block(height: 0pt)", ...emitBlocks(doc.children)])}`);
+  // Page runs (composed sections) bring their own, after their `set page`: content before
+  // a `set page` would start a new page and leave the first one blank.
+  const strut = doc.children[0]?.kind === "page-run" ? [] : ["block(height: 0pt)"];
+  lines.push(`#${seq([...strut, ...emitBlocks(doc.children)])}`);
   return lines.join("\n") + "\n";
 }
 
@@ -106,7 +109,7 @@ function withLineHeight(l: LineHeight | undefined, body: string): string {
 const PAGE_MARGINS =
   "{ let v = page.margin; let d = 2.5 / 21 * calc.min(page.width, page.height); " +
   "let r(x, full) = if x == auto { d } else if type(x) == relative { x.length + x.ratio * full } else if type(x) == ratio { x * full } else { x }; " +
-  "if v == auto { (left: d, right: d, top: d, bottom: d) } else { (left: r(v.left, page.width), right: r(v.right, page.width), top: r(v.top, page.height), bottom: r(v.bottom, page.height)) } }";
+  "if v == auto { (left: d, right: d, top: d, bottom: d) } else if type(v) != dictionary { let x = r(v, page.width); (left: x, right: x, top: x, bottom: x) } else { (left: r(v.left, page.width), right: r(v.right, page.width), top: r(v.top, page.height), bottom: r(v.bottom, page.height)) } }";
 
 function seq(items: string[]): string {
   if (items.length === 0) return "[]";
@@ -126,6 +129,7 @@ function textArgs(s: TextStyle): Record<string, string | undefined> {
     style: s.style && str(s.style),
     fill: s.fill && color(s.fill),
     tracking: s.tracking && length(s.tracking),
+    "number-width": s.numberWidth && str(s.numberWidth),
   };
 }
 
@@ -273,7 +277,7 @@ function imageCall(n: { src: string; width?: Size; height?: Size; alt?: string; 
 
 export function emitBlock(node: Block): string {
   const out = emitBlockBody(node);
-  const m = "margins" in node ? node.margins : undefined;
+  const m = "margins" in node && node.margins && (node.margins.above?.value || node.margins.below?.value) ? node.margins : undefined;
   // Full width: an auto-width block would shrink to its content and defeat `align`.
   return m ? call("block", { width: "100%", above: m.above && length(m.above), below: m.below && length(m.below) }, out) : out;
 }
@@ -285,6 +289,8 @@ function emitBlockBody(node: Block): string {
         "par",
         {
           justify: node.justify === undefined ? undefined : String(node.justify),
+          // CSS indents the first line of every block, not only after a previous paragraph.
+          "first-line-indent": node.indent && `(amount: ${length(node.indent)}, all: true)`,
         },
         inlines(node.children),
       );
@@ -324,7 +330,7 @@ function emitBlockBody(node: Block): string {
     case "place": {
       // Fixed boxes are offset from the page area, i.e. inside the margins.
       const m = (side: string) => (node.pageArea ? `m.${side} + ` : "");
-      const neg = (side: string, l: Length) => (node.pageArea ? `-(${m(side)}${length(l)})` : `-${length(l)}`);
+      const neg = (side: string, l: Length) => (node.pageArea ? `-(${m(side)}${length(l)})` : length({ ...l, value: -l.value }));
       const dx = node.x === "left" ? `${m("left")}${length(node.dx)}` : neg("right", node.dx);
       const dy = node.y === "top" ? `${m("top")}${length(node.dy)}` : neg("bottom", node.dy);
       let body = blocks(node.children);
@@ -342,14 +348,15 @@ function emitBlockBody(node: Block): string {
     case "styled-block":
       return call("text", textArgs(node.style), blocks(node.children));
     case "table": {
+      const names = node.fillAuto ? cellNames(node) : undefined;
       const parts: string[] = [];
-      if (node.header?.length) parts.push(call("table.header", { repeat: "true" }, ...rows(node.header)));
-      parts.push(...rows(node.body));
-      if (node.footer?.length) parts.push(call("table.footer", {}, ...rows(node.footer)));
-      return call(
+      if (node.header?.length) parts.push(call("table.header", { repeat: "true" }, ...rows(node.header, node.inset, names?.names)));
+      parts.push(...rows(node.body, node.inset, names?.names));
+      if (node.footer?.length) parts.push(call("table.footer", {}, ...rows(node.footer, node.inset, names?.names)));
+      const table = call(
         "table",
         {
-          columns: `(${node.columns.map(size).join(", ")}${node.columns.length === 1 ? "," : ""})`,
+          columns: names ? "cols" : tuple(node.columns),
           stroke:
             node.stroke === undefined
               ? undefined
@@ -362,6 +369,7 @@ function emitBlockBody(node: Block): string {
         },
         ...parts,
       );
+      return names ? autoTableLayout(node, names, table) : table;
     }
     case "grid":
       return call(
@@ -375,6 +383,7 @@ function emitBlockBody(node: Block): string {
               }
             : { gutter: node.gutter && length(node.gutter) }),
           align: [node.halign && align(node.halign), node.valign].filter(Boolean).join(" + ") || undefined,
+          rows: node.rows && (node.rowsIfFree ? `if free { ${tuple(node.rows)} } else { auto }` : tuple(node.rows)),
         },
         ...node.cells.map(gridCell),
       );
@@ -401,20 +410,87 @@ function emitBlockBody(node: Block): string {
   }
 }
 
-function rows(rs: TableRow[]): string[] {
-  return rs.flatMap((r) => r.cells.map(cell));
+function tuple(sizes: Size[]): string {
+  return `(${sizes.map(size).join(", ")}${sizes.length === 1 ? "," : ""})`;
 }
 
-function cell(c: TableCell): string {
+/** Variable names for the cells of an auto-layout table, and the cells of each column. */
+function cellNames(node: Extract<Block, { kind: "table" }>): { names: Map<TableCell, string>; columns: string[][] } {
+  const names = new Map<TableCell, string>();
+  const columns: string[][] = node.columns.map(() => []);
+  let k = 0;
+  for (const section of [node.header ?? [], node.body, node.footer ?? []]) {
+    // Rows still covered by a rowspan from above, per column.
+    let taken: number[] = [];
+    for (const row of section) {
+      let col = 0;
+      for (const c of row.cells) {
+        while ((taken[col] ?? 0) > 0) col++;
+        const name = `c${k++}`;
+        names.set(c, name);
+        const span = c.colspan ?? 1;
+        if (span === 1 && node.columns[col] === "auto") columns[col]?.push(name);
+        for (let j = 0; j < span; j++) taken[col + j] = c.rowspan ?? 1;
+        col += span;
+      }
+      taken = taken.map((t) => Math.max(0, (t ?? 0) - 1));
+    }
+  }
+  return { names, columns };
+}
+
+/**
+ * CSS automatic table layout for a table with a width: each `auto` column
+ * gets its content's natural width plus a share of the free space
+ * proportional to it. When the content does not fit, Typst's own `auto`
+ * sizing takes over (it wraps the widest columns first, as browsers do).
+ */
+function autoTableLayout(node: Extract<Block, { kind: "table" }>, cells: { names: Map<TableCell, string>; columns: string[][] }, table: string): string {
+  const all = [...(node.header ?? []), ...node.body, ...(node.footer ?? [])].flatMap((r) => r.cells);
+  const inset = node.inset ?? { value: 0, unit: "pt" as const };
+  const pad = "unit" in inset ? `2 * ${length(inset)}` : [inset.left, inset.right].map((l) => (l ? length(l) : "0pt")).join(" + ");
+  const autos = node.columns.flatMap((c, i) => (c === "auto" ? [i] : []));
+  const fixed = node.columns.flatMap((c) => (c === "auto" ? [] : [typeof c === "object" && c.unit === "%" && !c.offset ? `${num(c.value)}% * size.width` : size(c)]));
+  const lines = [
+    ...all.map((c) => `let ${cells.names.get(c)} = ${blocks(c.children)}`),
+    ...autos.map((i) => {
+      const list = cells.columns[i]!;
+      return `let m${i} = (${list.join(", ")}${list.length === 1 ? "," : ""}).fold(0pt, (a, c) => calc.max(a, measure(c).width)) + ${pad}`;
+    }),
+    `let need = ${autos.map((i) => `m${i}`).join(" + ")}`,
+    `let free = size.width - need${fixed.length ? ` - (${fixed.join(" + ")})` : ""}`,
+    `let cols = if free >= 0pt and need > 0pt { (${node.columns.map((c, i) => (c === "auto" ? `m${i} + free * (m${i} / need)` : size(c))).join(", ")},) } else { ${tuple(node.columns)} }`,
+    table,
+  ];
+  return `layout(size => {
+${lines.map((l) => indent(l)).join("\n")}
+})`;
+}
+
+function rows(rs: TableRow[], inset?: Length | Sides<Length>, names?: Map<TableCell, string>): string[] {
+  return rs.flatMap((r) => {
+    if (!r.height || !r.cells.length) return r.cells.map((c) => cell(c, undefined, names?.get(c)));
+    // A zero-width strut in the first cell keeps the row at least `height` tall (padding included).
+    const own = r.cells[0]!.inset ?? inset;
+    const pad = own && ("unit" in own ? [own, own] : [own.top, own.bottom]).filter((l): l is Length => !!l).map(length);
+    const strut = `block(height: calc.max(0pt, ${[length(r.height), ...(pad ?? [])].join(" - ")}))`;
+    const [first, ...rest] = r.cells;
+    return [cell(first!, strut, names?.get(first!)), ...rest.map((c) => cell(c, undefined, names?.get(c)))];
+  });
+}
+
+function cell(c: TableCell, strut?: string, name?: string): string {
   const named = {
     colspan: c.colspan && c.colspan > 1 ? num(c.colspan) : undefined,
     rowspan: c.rowspan && c.rowspan > 1 ? num(c.rowspan) : undefined,
     align: c.align && align(c.align),
     fill: c.fill && paint(c.fill),
+    inset: c.inset && sides(c.inset, length),
     // Sides left out fall back to the table's stroke.
     stroke: c.stroke && `(${(["top", "right", "bottom", "left"] as const).filter((k) => c.stroke![k]).map((k) => `${k}: ${stroke(c.stroke![k]!)}`).join(", ")})`,
   };
-  const body = blocks(c.children);
+  const content = name ?? blocks(c.children);
+  const body = strut ? call("grid", { columns: "(0pt, 1fr)" }, strut, content) : content;
   return Object.values(named).some((v) => v !== undefined) ? call("table.cell", named, body) : body;
 }
 
@@ -443,12 +519,9 @@ function boxBlock(s: BoxStyle, children: Block[]): string {
   const vpad = [s.inset?.top, s.inset?.bottom].filter((l): l is Length => !!l).map(length);
   // CSS heights exclude padding unless border-box; Typst's include it.
   const outer = (l: Length) => (s.borderBox || !vpad.length ? length(l) : [length(l), ...vpad].join(" + "));
-  const inner = (l: Length) => (!s.borderBox || !vpad.length ? length(l) : [length(l), ...vpad].join(" - "));
   let body = blocks(children);
   // `align` around the block would also align its contents: reset them.
   if (s.align) body = `align(start, ${body})`;
-  // A zero-width strut column keeps the row at least `min-height` tall.
-  if (s.minHeight) body = call("grid", { columns: "(0pt, 1fr)" }, call("block", { height: inner(s.minHeight) }), body);
   const spacing = {
     above: s.above && length(s.above),
     below: s.below && length(s.below),
@@ -456,18 +529,31 @@ function boxBlock(s: BoxStyle, children: Block[]): string {
   };
   const hpad = [s.inset?.left, s.inset?.right].filter((l): l is Length => !!l).map(length);
   const width = s.width && (s.contentWidth && hpad.length ? [size(s.width), ...hpad].join(" + ") : size(s.width));
+  // `min-height`: measured, so a box that fits gets a definite height (in which
+  // fractional spacing and bottom-anchored children work) and a taller one breaks freely.
+  const min = s.minHeight && !s.height ? outer(s.minHeight) : undefined;
   const args = {
     width,
-    height: s.height && outer(s.height),
+    height: s.height ? outer(s.height) : min && "h",
     inset: s.inset && sides(s.inset, length),
     fill: s.fill && paint(s.fill),
     stroke: s.stroke && sides(s.stroke, stroke),
     radius: s.radius && radius(s.radius),
     clip: s.clip ? "true" : undefined,
   };
-  let b = s.image ? withBackground(s, args, spacing, body) : call("block", { ...args, ...spacing }, body);
+  const content = min ? "body(h != auto)" : body;
+  // Spacing set inside a `layout` does not reach the surrounding flow: wrapped boxes get it outside.
+  const wrapped = !!(min || s.image || s.shadows?.length);
+  const inner = wrapped ? { breakable: spacing.breakable } : spacing;
+  let b = s.image ? withBackground(s, args, inner, content) : call("block", { ...args, ...inner }, content);
   if (s.shadows?.length) b = shadowed(b, s);
-  return s.align ? `align(${align(s.align)}, ${b})` : b;
+  if (min) {
+    const probe = call("block", { ...args, height: undefined, fill: undefined }, "body(false)");
+    // `free`: whether flex-column spacers may take the box's spare height.
+    b = ["layout(size => {", indent(`let body(free) = ${body}`), `  let h = measure(${probe}, width: size.width).height`, `  let h = if h < ${min} { ${min} } else { auto }`, indent(b), "})"].join("\n");
+  }
+  if (s.align) b = `align(${align(s.align)}, ${b})`;
+  return wrapped && (spacing.above || spacing.below) ? call("block", { above: spacing.above, below: spacing.below }, b) : b;
 }
 
 /** Paints a background image under the box content, clipped to the box. */

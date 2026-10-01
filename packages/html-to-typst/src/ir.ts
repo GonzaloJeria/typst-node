@@ -52,6 +52,8 @@ export interface TextStyle {
   style?: "normal" | "italic";
   fill?: Color;
   tracking?: Length;
+  /** `font-variant-numeric: tabular-nums` / `proportional-nums`. */
+  numberWidth?: "tabular" | "proportional";
 }
 
 /** An outer `box-shadow` layer; lengths are absolute (pt). */
@@ -159,10 +161,14 @@ export interface TableCell {
   fill?: Paint;
   /** The cell's own borders, when they differ from the table-wide stroke. */
   stroke?: Sides<Stroke>;
+  /** The cell's own padding, when it differs from the table-wide inset. */
+  inset?: Sides<Length>;
 }
 
 export interface TableRow {
   cells: TableCell[];
+  /** CSS `height` of the `<tr>`: a minimum, padding included. */
+  height?: Length;
 }
 
 /** Vertical CSS margins of a block that needs no other box styling. */
@@ -180,6 +186,8 @@ export type Block =
       children: Inline[];
       align?: HAlign;
       justify?: boolean;
+      /** CSS `text-indent` of the first line. */
+      indent?: Length;
       /** CSS `line-height` in em, when it differs from the document's. */
       lineHeight?: LineHeight;
       margins?: Margins;
@@ -213,6 +221,11 @@ export type Block =
       /** Per-cell stroke: one for all sides, or per side (e.g. only bottom rules). */
       stroke?: Stroke | Sides<Stroke> | null;
       inset?: Length | Sides<Length>;
+      /**
+       * The table has a width: its `auto` columns share the free space in
+       * proportion to their content, as in CSS automatic table layout.
+       */
+      fillAuto?: boolean;
       margins?: Margins;
     }
   | {
@@ -225,6 +238,10 @@ export type Block =
       valign?: "top" | "horizon" | "bottom";
       /** Horizontal alignment of every cell (`align-items` in a flex column). */
       halign?: HAlign;
+      /** Row sizes; fractional rows spread the free height (`justify-content` in a flex column). */
+      rows?: Size[];
+      /** Use `rows` only when the enclosing `min-height` box got its definite height. */
+      rowsIfFree?: boolean;
       cells: Block[][];
       margins?: Margins;
     }

@@ -1,20 +1,44 @@
 {
   "bootstrap-report.html": [
-    0.844
+    0.989
   ],
   "modern-css.html": [
-    0.9
-  ],
-  "tailwind-invoice.html": [
     0.984
   ],
+  "tailwind-invoice.html": [
+    1
+  ],
   "flex-layouts.html": [
-    0.821
+    0.983
   ],
   "plain-html.html": [
-    0.948
+    0.998
   ],
   "visual-effects.html": [
-    0.767
+    0.959
+  ],
+  "purchase-order.html": [
+    0.972
+  ],
+  "tw-certificate.html": [
+    0.947
+  ],
+  "tw-letter.html": [
+    0.888
+  ],
+  "tw-quote.html": [
+    0.986
+  ],
+  "tw-receipt.html": [
+    0.994
+  ],
+  "tw-report.html": [
+    0.974
+  ],
+  "tw-statement.html": [
+    0.991,
+    0.984,
+    0.977,
+    0.906
   ]
 }

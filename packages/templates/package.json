@@ -1,0 +1,74 @@
+{
+  "name": "@gjeria/pdf-templates",
+  "version": "0.1.3",
+  "description": "Template-based PDFs: Handlebars + Tailwind (bundled) templates from files or a database, rendered with Typst. CLI with live preview.",
+  "keywords": [
+    "pdf",
+    "templates",
+    "handlebars",
+    "tailwind",
+    "html-to-pdf",
+    "typst"
+  ],
+  "author": "Gonzalo Jeria (https://github.com/GonzaloJeria)",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GonzaloJeria/typst-node.git",
+    "directory": "packages/templates"
+  },
+  "homepage": "https://github.com/GonzaloJeria/typst-node/tree/main/packages/templates#readme",
+  "bugs": "https://github.com/GonzaloJeria/typst-node/issues",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "typst-pdf": "./dist/cli.js"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsup",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@gjeria/typst-html-pdf": "workspace:^",
+    "handlebars": "^4.7.8"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.cjs"
+        }
+      }
+    }
+  }
+}

@@ -64,6 +64,9 @@ jobs:
       # Tests use the freshly built linux-x64 sidecar.
       - run: pnpm test
       - run: pnpm build
+      # The packages as npm will get them, installed in an empty project.
+      - name: Package smoke test
+        run: node scripts/smoke-pack.mjs
       - name: Publish
         run: pnpm changeset publish
         env:

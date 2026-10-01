@@ -80,7 +80,8 @@ export function composeToTypst(input: ComposeInput, options: TranspileOptions = 
 function pageCss(page: PageOptions): string {
   const decls = [
     page.size && `size: ${page.size};`,
-    page.margin && `margin: ${page.margin};`,
+    // Headers and footers need a margin to live in; Chrome's default leaves none.
+    (page.margin ?? (page.header || page.footer ? "20mm 15mm" : undefined)) && `margin: ${page.margin ?? "20mm 15mm"};`,
     page.background && `background: ${page.background};`,
   ].filter(Boolean);
   return decls.length ? `@page { ${decls.join(" ")} }` : "";

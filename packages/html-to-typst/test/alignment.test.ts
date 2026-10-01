@@ -76,9 +76,22 @@ describe("flex align-items", () => {
     expect(warnings).toEqual([]);
   });
 
-  it("warns about justify-content in a flex column", () => {
-    const { warnings } = grid(`<div style="display:flex; flex-direction:column; justify-content:center"><div>A</div></div>`);
-    expect(warnings).toEqual(["Unsupported CSS ignored: justify-content: center with flex-direction: column"]);
+  it("ignores justify-content in a flex column without a height, as browsers do", () => {
+    const r = grid(`<div style="display:flex; flex-direction:column; justify-content:center"><div>A</div></div>`);
+    expect(r.warnings).toEqual([]);
+    expect(r.grid.rows).toBeUndefined();
+  });
+
+  it("spreads flex column items with justify-content in a box with a height", () => {
+    const r = htmlToTypst(`<div style="display:flex; flex-direction:column; justify-content:space-between; height:5cm"><div>A</div><div>B</div></div>`);
+    expect(r.warnings).toEqual([]);
+    expect(r.source).toContain("rows: (auto, 1fr, auto)");
+  });
+
+  it("uses the spare height of a min-height box only when it gets one", () => {
+    const r = htmlToTypst(`<div style="display:flex; flex-direction:column; justify-content:flex-end; min-height:5cm"><div>A</div></div>`);
+    expect(r.source).toContain("rows: if free { (1fr, auto) } else { auto }");
+    expect(r.source).toContain("body(h != auto)");
   });
 });
 

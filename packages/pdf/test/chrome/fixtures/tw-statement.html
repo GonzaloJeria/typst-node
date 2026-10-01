@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Estado de cuenta (varias páginas, encabezado de tabla repetido)</title>
+<link rel="stylesheet" href="tailwind">
+<style>
+  @page { size: A4; margin: 18mm 15mm 20mm; @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #71717a } }
+  thead { display: table-header-group }
+  tr { break-inside: avoid }
+</style>
+</head>
+<body class="text-[9pt] text-zinc-800">
+  <header class="flex items-end justify-between border-b-2 border-zinc-900 pb-3">
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-widest text-zinc-500">Banco Ejemplo</p>
+      <h1 class="text-2xl font-bold">Estado de cuenta</h1>
+    </div>
+    <div class="text-right text-zinc-600">
+      <p>Cuenta corriente N° 00-123-45678-9</p>
+      <p>Período: 01/03/2026 – 31/03/2026</p>
+    </div>
+  </header>
+  <section class="mt-4 grid grid-cols-3 gap-3">
+    <div class="rounded-lg border border-zinc-200 p-3"><p class="text-zinc-500">Saldo inicial</p><p class="text-lg font-semibold tabular-nums">$1.500.000</p></div>
+    <div class="rounded-lg border border-zinc-200 p-3"><p class="text-zinc-500">Movimientos</p><p class="text-lg font-semibold">70</p></div>
+    <div class="rounded-lg bg-zinc-900 p-3 text-white"><p class="text-zinc-300">Saldo final</p><p class="text-lg font-semibold tabular-nums">$-2.337.000</p></div>
+  </section>
+  <table class="mt-5 w-full border-collapse">
+    <thead>
+      <tr class="border-b-2 border-zinc-900 text-left text-xs uppercase tracking-wide text-zinc-600">
+        <th class="px-2 py-2">Fecha</th><th class="px-2 py-2">Descripción</th><th class="px-2 py-2 text-right">Cargo</th><th class="px-2 py-2 text-right">Abono</th><th class="px-2 py-2 text-right">Saldo</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">01/03/2026</td>
+        <td class="px-2 py-1.5">Pago remuneraciones</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$82.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.418.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">02/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$338.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.756.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">03/03/2026</td>
+        <td class="px-2 py-1.5">Transferencia recibida</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$42.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.798.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">04/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$192.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.606.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">05/03/2026</td>
+        <td class="px-2 py-1.5">Transferencia recibida</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$264.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.870.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">06/03/2026</td>
+        <td class="px-2 py-1.5">Abono intereses</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$24.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.894.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">07/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$227.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.667.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">08/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$40.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.707.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">09/03/2026</td>
+        <td class="px-2 py-1.5">Abono intereses</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$51.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.758.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">10/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$35.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.793.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">11/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$119.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.674.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">12/03/2026</td>
+        <td class="px-2 py-1.5">Transferencia recibida</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$300.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.974.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">13/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$30.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$2.004.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">14/03/2026</td>
+        <td class="px-2 py-1.5">Abono intereses</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$28.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$2.032.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">15/03/2026</td>
+        <td class="px-2 py-1.5">Compra con tarjeta</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$153.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.879.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">16/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$78.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.957.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">17/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$297.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.660.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">18/03/2026</td>
+        <td class="px-2 py-1.5">Comisión mantención</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$291.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.369.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">19/03/2026</td>
+        <td class="px-2 py-1.5">Compra con tarjeta</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$57.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.312.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">20/03/2026</td>
+        <td class="px-2 py-1.5">Abono intereses</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$195.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.507.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">21/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$285.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.222.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">22/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$293.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$929.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">23/03/2026</td>
+        <td class="px-2 py-1.5">Transferencia recibida</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$321.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.250.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">24/03/2026</td>
+        <td class="px-2 py-1.5">Abono intereses</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$259.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.509.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">25/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$165.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.674.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">26/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$304.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.370.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">27/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$190.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.180.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">28/03/2026</td>
+        <td class="px-2 py-1.5">Comisión mantención</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$132.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$1.048.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">01/03/2026</td>
+        <td class="px-2 py-1.5">Compra con tarjeta</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$362.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$686.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">02/03/2026</td>
+        <td class="px-2 py-1.5">Abono intereses</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$46.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$732.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">03/03/2026</td>
+        <td class="px-2 py-1.5">Comisión mantención</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$273.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$459.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">04/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$180.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$279.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">05/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$152.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$127.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">06/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$65.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$62.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">07/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$89.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$151.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">08/03/2026</td>
+        <td class="px-2 py-1.5">Pago remuneraciones</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$82.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$69.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">09/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$220.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-151.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">10/03/2026</td>
+        <td class="px-2 py-1.5">Transferencia recibida</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$347.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$196.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">11/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$396.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-200.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">12/03/2026</td>
+        <td class="px-2 py-1.5">Pago remuneraciones</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$179.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-379.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">13/03/2026</td>
+        <td class="px-2 py-1.5">Pago remuneraciones</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$309.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-688.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">14/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$301.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-989.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">15/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$40.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.029.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">16/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$143.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.172.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">17/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$361.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.533.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">18/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$36.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.569.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">19/03/2026</td>
+        <td class="px-2 py-1.5">Comisión mantención</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$336.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.905.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">20/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$150.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.055.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">21/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$347.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.708.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">22/03/2026</td>
+        <td class="px-2 py-1.5">Pago remuneraciones</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$16.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.724.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">23/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$186.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.910.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">24/03/2026</td>
+        <td class="px-2 py-1.5">Compra con tarjeta</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$317.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.227.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">25/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$257.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.484.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">26/03/2026</td>
+        <td class="px-2 py-1.5">Transferencia recibida</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$116.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.368.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">27/03/2026</td>
+        <td class="px-2 py-1.5">Comisión mantención</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$71.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.439.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">28/03/2026</td>
+        <td class="px-2 py-1.5">Abono intereses</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$208.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.231.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">01/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$259.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.972.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">02/03/2026</td>
+        <td class="px-2 py-1.5">Pago proveedor</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$90.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.062.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">03/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$210.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.272.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">04/03/2026</td>
+        <td class="px-2 py-1.5">Comisión mantención</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$75.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.347.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">05/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$286.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.061.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">06/03/2026</td>
+        <td class="px-2 py-1.5">Comisión mantención</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$366.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.427.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">07/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$188.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.239.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">08/03/2026</td>
+        <td class="px-2 py-1.5">Depósito en efectivo</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$123.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.116.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">09/03/2026</td>
+        <td class="px-2 py-1.5">Compra con tarjeta</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$47.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.163.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">10/03/2026</td>
+        <td class="px-2 py-1.5">Compra con tarjeta</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$82.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.245.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">11/03/2026</td>
+        <td class="px-2 py-1.5">Abono intereses</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$342.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.903.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">12/03/2026</td>
+        <td class="px-2 py-1.5">Abono intereses</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700">$11.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-1.892.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">13/03/2026</td>
+        <td class="px-2 py-1.5">Pago servicios básicos</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$306.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.198.000</td>
+      </tr>
+      <tr class="border-b border-zinc-200 even:bg-zinc-50">
+        <td class="px-2 py-1.5 text-zinc-500">14/03/2026</td>
+        <td class="px-2 py-1.5">Compra con tarjeta</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-red-700">$139.000</td>
+        <td class="px-2 py-1.5 text-right tabular-nums text-emerald-700"></td>
+        <td class="px-2 py-1.5 text-right tabular-nums font-medium">$-2.337.000</td>
+      </tr>
+    </tbody>
+  </table>
+  <section class="mt-6 break-before-page">
+    <h2 class="text-lg font-bold">Información importante</h2>
+    <p class="mt-2 leading-relaxed text-zinc-600">Este documento es un ejemplo generado para pruebas. Revise sus movimientos y comuníquese con su ejecutivo ante cualquier diferencia dentro de los 30 días siguientes a la fecha de emisión.</p>
+    <ul class="mt-3 list-disc space-y-1 pl-5 text-zinc-600">
+      <li>Los cargos se informan en pesos chilenos.</li>
+      <li>Las comisiones incluyen IVA.</li>
+      <li>El saldo final considera los movimientos hasta el último día hábil del período.</li>
+    </ul>
+  </section>
+</body>
+</html>
