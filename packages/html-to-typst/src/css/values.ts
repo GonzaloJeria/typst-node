@@ -7,7 +7,7 @@ export interface LengthContext {
   fontSize: number;
   /** Root font size, in pt. */
   rootFontSize: number;
-  /** Page box in pt, for viewport units (default: A4). */
+  /** Page area in pt, for viewport units (default: A4). */
   viewport?: { width: number; height: number };
 }
 
@@ -49,7 +49,7 @@ export function parseLength(value: string, ctx: LengthContext): Length | undefin
     case "lh": return { value: n * ctx.fontSize * 1.2, unit: "pt" };
     case "rlh": return { value: n * ctx.rootFontSize * 1.2, unit: "pt" };
   }
-  // Viewport units: the viewport is the page box when printing.
+  // Viewport units: when printing, the viewport is the page area (inside the margins).
   const vp = ctx.viewport ?? A4_PT;
   const viewport: Record<string, number> = {
     vw: vp.width, svw: vp.width, lvw: vp.width, dvw: vp.width, vi: vp.width,

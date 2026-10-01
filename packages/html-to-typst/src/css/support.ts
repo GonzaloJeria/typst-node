@@ -43,7 +43,7 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   "text-decoration-line": oneOf("none", "underline", "line-through"),
   "text-transform": oneOf("none", "uppercase", "lowercase", "capitalize"),
   "letter-spacing": (v) => v === "normal" || isLength(v),
-  "white-space": oneOf("normal", "pre", "pre-wrap", "pre-line", "break-spaces"),
+  "white-space": oneOf("normal", "nowrap", "pre", "pre-wrap", "pre-line", "break-spaces"),
   "line-height": (v) => v === "normal" || /^\d*\.?\d+$/.test(v) || isLength(v),
   display: oneOf(
     "none", "inline", "block", "inline-block", "flex", "grid", "list-item",
@@ -115,7 +115,7 @@ export const LIST_STYLES = new Set([
 ]);
 
 /** Properties with no visual effect on paper: ignored without a warning. */
-const QUIET = /^(?:-(?:webkit|moz|ms|o)-|cursor$|pointer-events$|user-select$|transition|animation|will-change$|scroll-|touch-action$|resize$|caret-color$|outline-offset$|outline-color$|appearance$|tab-size$|text-size-adjust$|text-rendering$|font-smooth|font-synthesis|font-kerning$|font-optical-sizing$|accent-color$|color-scheme$|print-color-adjust$|color-adjust$|content-visibility$|contain|isolation$|backface-visibility$|perspective|overscroll-behavior|forced-color-adjust$|speak|interpolate-size$|field-sizing$|text-wrap|text-underline-offset$|text-decoration-thickness$|text-decoration-color$|text-decoration-style$)/;
+const QUIET = /^(?:-(?:webkit|moz|ms|o)-|cursor$|pointer-events$|user-select$|transition|animation|will-change$|scroll-|touch-action$|resize$|caret-color$|outline-offset$|outline-color$|appearance$|tab-size$|text-size-adjust$|text-rendering$|font-smooth|font-synthesis|font-kerning$|font-optical-sizing$|accent-color$|color-scheme$|print-color-adjust$|color-adjust$|content-visibility$|contain|isolation$|backface-visibility$|perspective|overscroll-behavior|forced-color-adjust$|speak|interpolate-size$|field-sizing$|text-wrap|text-underline-offset$|text-decoration-thickness$|text-decoration-color$|text-decoration-style$|text-overflow$)/;
 
 /** Whether a value is valid for a property this converter knows; undefined for unknown properties. */
 export function isValidValue(property: string, value: string): boolean | undefined {

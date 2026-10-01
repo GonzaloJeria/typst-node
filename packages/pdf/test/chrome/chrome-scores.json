@@ -3,10 +3,10 @@
     0.844
   ],
   "modern-css.html": [
-    0.9
+    0.946
   ],
   "tailwind-invoice.html": [
-    0.984
+    0.998
   ],
   "flex-layouts.html": [
     0.821
@@ -16,5 +16,8 @@
   ],
   "visual-effects.html": [
     0.767
+  ],
+  "purchase-order.html": [
+    0.933
   ]
 }

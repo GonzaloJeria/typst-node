@@ -21,10 +21,11 @@ describe("heights", () => {
     expect(r.source).toContain("height: 100%,");
   });
 
-  it("implements min-height with a strut column", () => {
+  it("gives a min-height box a definite height when its content fits", () => {
     const r = box(`<div style="min-height: 3cm; background: #eee">x</div>`);
     expect(r.warnings).toEqual([]);
-    expect(r.source).toContain("grid(columns: (0pt, 1fr), block(height: 3cm)");
+    expect(r.source).toContain("let h = if h < 3cm { 3cm } else { auto }");
+    expect(r.source).toContain("height: h");
   });
 });
 

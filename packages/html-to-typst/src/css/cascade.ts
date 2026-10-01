@@ -27,6 +27,8 @@ export interface ComputedStyle {
   /** Computed font size in pt. */
   fontSize: number;
   rootFontSize: number;
+  /** Page area in pt, for viewport units. */
+  viewport?: { width: number; height: number };
 }
 
 interface CompiledRule {
@@ -49,7 +51,7 @@ export class Cascade {
   readonly #registered: Stylesheet["properties"];
   readonly warnings: string[] = [];
 
-  constructor(sheet: Stylesheet, readonly rootFontSize: number, media: MediaContext = A4_MEDIA) {
+  constructor(sheet: Stylesheet, readonly rootFontSize: number, media: MediaContext = A4_MEDIA, readonly viewport?: { width: number; height: number }) {
     this.#registered = sheet.properties;
     const unlayered = sheet.layers.length;
     let order = 0;
@@ -179,7 +181,7 @@ export class Cascade {
     const parentSize = parent?.fontSize ?? this.rootFontSize;
     const fs = own.get("font-size");
     const fontSize = (fs && fs !== "inherit" && parseFontSize(fs, parentSize, this.rootFontSize)) || parentSize;
-    return { props, own, fontSize, rootFontSize: this.rootFontSize };
+    return { props, own, fontSize, rootFontSize: this.rootFontSize, ...(this.viewport ? { viewport: this.viewport } : {}) };
   }
 }
 
@@ -264,6 +266,11 @@ export function expandShorthand(property: string, rawValue: string): [string, st
   const alias = SHORTHAND_BREAKS[property];
   if (alias) return [[alias, value === "always" ? "page" : value]];
 
+  if (property === "text-decoration") {
+    // Only the line matters on paper; color, style and thickness are not drawn.
+    const lines = splitValue(value).filter((t) => /^(?:none|underline|overline|line-through|inherit|initial|unset|revert(?:-layer)?)$/.test(t));
+    return lines.length ? [["text-decoration-line", lines.join(" ")]] : [];
+  }
   if (property === "background") {
     // One layer: color, gradient or url(), plus position / size and repeat.
     const tokens = splitValue(value).map((t) => t.replace(/,$/, ""));
