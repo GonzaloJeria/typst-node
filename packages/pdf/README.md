@@ -60,7 +60,7 @@ process.on("SIGTERM", () => renderer.dispose());
 
 Cascade, specificity, inheritance and CSS variables; colors, gradients,
 opacity; borders, radius, shadows, transforms; `position` (absolute, relative,
-fixed, running headers); tables with rowspan/colspan; flex rows and grids;
+fixed, running headers); tables with rowspan/colspan; flex rows (with `justify-content` and `align-items`) and grids;
 multi-column text; `height`/`min-height`; background images; `@page` size,
 margins, backgrounds, margin boxes with page counters, named pages and `:first`;
 `::before`/`::after`; lists; `line-height` and margins.

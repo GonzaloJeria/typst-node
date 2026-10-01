@@ -178,8 +178,11 @@ export function emitBlock(node: Block): string {
       );
       return node.align ? `align(${align(node.align)}, ${body})` : body;
     }
-    case "heading":
-      return call("heading", { level: String(node.level) }, inlines(node.children));
+    case "heading": {
+      const body = call("heading", { level: String(node.level) }, inlines(node.children));
+      // Full width, so an enclosing auto-width block cannot shrink it to its text.
+      return node.align ? `block(width: 100%, align(${align(node.align)}, ${body}))` : body;
+    }
     case "list": {
       const items = node.items.map(blocks);
       return node.ordered
@@ -235,7 +238,13 @@ export function emitBlock(node: Block): string {
         "grid",
         {
           columns: `(${node.columns.map(size).join(", ")}${node.columns.length === 1 ? "," : ""})`,
-          gutter: node.gutter && length(node.gutter),
+          ...(node.columnGutters
+            ? {
+                "column-gutter": `(${node.columnGutters.map(length).join(", ")}${node.columnGutters.length === 1 ? "," : ""})`,
+                "row-gutter": node.gutter && length(node.gutter),
+              }
+            : { gutter: node.gutter && length(node.gutter) }),
+          align: node.valign,
         },
         ...node.cells.map(blocks),
       );

@@ -159,7 +159,7 @@ export type Block =
   | PageRun
   /** CSS multi-column layout (`column-count`). */
   | { kind: "columns"; count: number; gutter?: Length; children: Block[] }
-  | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[] }
+  | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; children: Inline[]; align?: HAlign }
   | {
       kind: "list";
       ordered: boolean;
@@ -183,7 +183,16 @@ export type Block =
       stroke?: Stroke | Sides<Stroke> | null;
       inset?: Length;
     }
-  | { kind: "grid"; columns: Size[]; gutter?: Length; cells: Block[][] }
+  | {
+      kind: "grid";
+      columns: Size[];
+      gutter?: Length;
+      /** Per-boundary column gaps, overriding `gutter` between columns (flex spacers). */
+      columnGutters?: Length[];
+      /** Vertical alignment of every cell (CSS `align-items`). */
+      valign?: "top" | "horizon" | "bottom";
+      cells: Block[][];
+    }
   | { kind: "raw-block"; value: string; lang?: string }
   | { kind: "rule" }
   | { kind: "pagebreak"; weak?: boolean }

@@ -69,6 +69,8 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   "flex-grow": (v) => /^\d*\.?\d+$/.test(v),
   "flex-basis": (v) => v === "auto" || isLength(v),
   "flex-direction": oneOf("row", "column", "column-reverse"),
+  "justify-content": oneOf("normal", "flex-start", "start", "left", "flex-end", "end", "right", "center", "space-between", "space-around", "space-evenly"),
+  "align-items": oneOf("normal", "stretch", "flex-start", "start", "self-start", "center", "flex-end", "end", "self-end"),
   "flex-wrap": oneOf("nowrap"),
   "grid-template-columns": any,
   gap: any,

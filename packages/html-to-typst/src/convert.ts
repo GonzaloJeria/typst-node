@@ -127,15 +127,23 @@ export class Converter {
     return p;
   }
 
+  /** Set while converting a flex item that shrinks to its content (an `auto` track). */
+  #shrinkItem = false;
+
   #block(el: Element, style: ComputedStyle, parent: ComputedStyle): Block[] {
     const tag = el.tagName;
+    const shrink = this.#shrinkItem;
+    this.#shrinkItem = false;
     let content: Block[];
     const display = style.props.get("display");
 
     if (tag in HEADINGS) {
       const run = new InlineRun();
       this.#inlineChildren(run, el, style);
-      content = [{ kind: "heading", level: HEADINGS[tag]!, children: run.finish() }];
+      const heading: Extract<Block, { kind: "heading" }> = { kind: "heading", level: HEADINGS[tag]!, children: run.finish() };
+      const a = hAlign(style.props.get("text-align"));
+      if (a && a !== "start" && a !== "left") heading.align = a;
+      content = [heading];
     } else if (tag === "ul" || tag === "ol") {
       content = [this.#list(el, style)];
     } else if (tag === "table") {
@@ -164,7 +172,7 @@ export class Converter {
 
     const position = style.own.get("position") ?? "static";
     const positioned = position === "relative" || position === "absolute" || position === "fixed";
-    content = this.#applyBox(el, style, content, positioned);
+    content = this.#applyBox(el, style, content, positioned, shrink);
 
     const textDiff = this.#textDiff(style, parent);
     if (textDiff) content = [{ kind: "styled-block", style: textDiff, children: content }];
@@ -236,7 +244,7 @@ export class Converter {
     return { kind: "place", x, y, dx: (x === "left" ? left : right) ?? zero, dy: (y === "top" ? top : bottom) ?? zero, children };
   }
 
-  #applyBox(el: Element, s: ComputedStyle, content: Block[], positioned = false): Block[] {
+  #applyBox(el: Element, s: ComputedStyle, content: Block[], positioned = false, shrink = false): Block[] {
     const ctx = lengthContext(s);
     const box: BoxStyle = {};
     const p = s.props;
@@ -279,7 +287,7 @@ export class Converter {
     // CSS blocks stretch to the container; make that visible when the box is.
     // Absolutely positioned boxes shrink to fit instead.
     const outOfFlow = /^(absolute|fixed)$/.test(s.own.get("position") ?? "");
-    if (!box.width && !box.align && !outOfFlow && (box.fill || box.stroke || box.shadows || box.image) && el.tagName !== "table") {
+    if (!box.width && !box.align && !outOfFlow && !shrink && (box.fill || box.stroke || box.shadows || box.image) && el.tagName !== "table") {
       box.width = { value: 100, unit: "%" };
     }
     // Tables and images carry their own width; keep them as the box body.
@@ -314,14 +322,20 @@ export class Converter {
 
   #grid(el: Element, style: ComputedStyle, display: "flex" | "grid"): Block[] {
     const ctx = lengthContext(style);
-    const children = el.childNodes.filter(isElement).filter((c) => !SKIP.has(c.tagName));
     const cells: Block[][] = [];
-    const childStyles = children.map((c) => this.style(c, style));
+    const all = el.childNodes.filter(isElement).filter((c) => !SKIP.has(c.tagName));
+    const allStyles = all.map((c) => this.style(c, style));
+    const visible = all.map((_, i) => i).filter((i) => allStyles[i]!.props.get("display") !== "none");
+    const children = visible.map((i) => all[i]!);
+    const childStyles = visible.map((i) => allStyles[i]!);
 
     let columns: Size[] | undefined;
     if (display === "flex") {
       const dir = style.props.get("flex-direction") ?? "row";
-      if (dir.startsWith("column")) return this.blocks(el, style);
+      if (dir.startsWith("column")) {
+        this.#flexAlignmentUnsupported(style, "flex-direction: column");
+        return this.blocks(el, style);
+      }
       columns = childStyles.map((cs) => {
         const grow = Number(splitValue(cs.props.get("flex") ?? cs.props.get("flex-grow") ?? "0")[0]);
         if (grow > 0) return { value: grow, unit: "fr" as const };
@@ -329,6 +343,7 @@ export class Converter {
         return w ?? "auto";
       });
     } else {
+      this.#flexAlignmentUnsupported(style, "display: grid");
       columns = parseTrackList(style.props.get("grid-template-columns") ?? "", ctx);
       if (!columns) {
         this.warnings.add(`Unsupported grid-template-columns: ${style.props.get("grid-template-columns") ?? "(none)"}`);
@@ -336,12 +351,27 @@ export class Converter {
       }
     }
     children.forEach((c, i) => {
-      const cs = childStyles[i]!;
-      if (cs.props.get("display") !== "none") cells.push(this.#block(c, cs, style));
+      // Flex items without flex-grow or a width shrink to their content.
+      this.#shrinkItem = display === "flex" && columns![i] === "auto";
+      cells.push(this.#block(c, childStyles[i]!, style));
     });
     if (display === "flex") columns = columns.slice(0, cells.length);
     const gap = parseLength(splitValue(style.props.get("column-gap") ?? style.props.get("gap") ?? "")[0] ?? "", ctx);
-    return [{ kind: "grid", columns: columns.length ? columns : ["auto"], cells, ...(gap ? { gutter: gap } : {}) }];
+    const grid: Extract<Block, { kind: "grid" }> = { kind: "grid", columns: columns.length ? columns : ["auto"], cells, ...(gap ? { gutter: gap } : {}) };
+    if (display === "flex") {
+      const valign = FLEX_ALIGN[style.props.get("align-items") ?? ""];
+      if (valign) grid.valign = valign;
+      justifyFlex(grid, style.props.get("justify-content") ?? "", gap);
+    }
+    return [grid];
+  }
+
+  /** `justify-content`/`align-items` are only converted for flex rows. */
+  #flexAlignmentUnsupported(style: ComputedStyle, context: string): void {
+    for (const prop of ["justify-content", "align-items"]) {
+      const v = style.own.get(prop);
+      if (v && !/^(normal|stretch|flex-start|start)$/.test(v)) this.warnings.add(`Unsupported CSS ignored: ${prop}: ${v} with ${context}`);
+    }
   }
 
   // ── Inline formatting context ─────────────────────────────────────────────
@@ -644,6 +674,56 @@ export class Converter {
     }
     return [...new Set(out)];
   }
+}
+
+const FLEX_ALIGN: Record<string, "top" | "horizon" | "bottom"> = {
+  "flex-start": "top", start: "top", "self-start": "top",
+  center: "horizon",
+  "flex-end": "bottom", end: "bottom", "self-end": "bottom",
+};
+
+/**
+ * CSS `justify-content` for a flex row: free space goes into empty `1fr`
+ * spacer columns. Items that grow (`fr` tracks) already take that space,
+ * as in CSS. The gap stays between items, never next to an edge spacer.
+ */
+function justifyFlex(grid: Extract<Block, { kind: "grid" }>, justify: string, gap: Length | undefined): void {
+  const n = grid.cells.length;
+  if (n === 0 || grid.columns.some((c) => typeof c === "object" && c.unit === "fr")) return;
+  // Spacer weights: [before first, between each pair..., after last].
+  let weights: number[];
+  switch (justify) {
+    case "flex-end": case "end": case "right": weights = [1, ...Array(n - 1).fill(0), 0]; break;
+    case "center": weights = [1, ...Array(n - 1).fill(0), 1]; break;
+    case "space-between": weights = n === 1 ? [0, 0] : [0, ...Array(n - 1).fill(1), 0]; break;
+    case "space-around": weights = [0.5, ...Array(n - 1).fill(1), 0.5]; break;
+    case "space-evenly": weights = Array(n + 1).fill(1); break;
+    default: return;
+  }
+  if (n === 1 && justify === "space-between") return;
+  const zero: Length = { value: 0, unit: "pt" };
+  const columns: Size[] = [];
+  const cells: Block[][] = [];
+  const gutters: Length[] = [];
+  const spacer = (w: number) => {
+    if (!w) return false;
+    if (columns.length) gutters.push(zero);
+    columns.push({ value: w, unit: "fr" });
+    cells.push([]);
+    return true;
+  };
+  spacer(weights[0]!);
+  grid.cells.forEach((cell, i) => {
+    // The CSS gap separates consecutive items; spacers sit after it.
+    if (columns.length) gutters.push(i > 0 && gap ? gap : zero);
+    columns.push(grid.columns[i]!);
+    cells.push(cell);
+    if (i < n - 1) spacer(weights[i + 1]!);
+  });
+  spacer(weights[n]!);
+  grid.columns = columns;
+  grid.cells = cells;
+  grid.columnGutters = gutters;
 }
 
 // ── Inline run with CSS whitespace collapsing ────────────────────────────────

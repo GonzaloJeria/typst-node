@@ -236,7 +236,8 @@ del elemento); fondos con color o `linear-gradient`/`radial-gradient`; padding,
 bordes (sólidos, `dashed`, `dotted`) y `border-radius`, también en elementos
 inline (badges, chips); `text-transform`; `::before`/`::after` con `content`
 (strings con escapes, `attr()`, comillas); `list-style` (marcadores, numeración
-alfabética y romana, `none`); tablas con rowspan/colspan; flex en fila y grid
+alfabética y romana, `none`); tablas con rowspan/colspan; flex en fila (con `justify-content` y
+`align-items`) y grid
 explícito; `@page`; saltos de página.
 
 **Posicionamiento y efectos:** `position: absolute` (anclado a la esquina que
