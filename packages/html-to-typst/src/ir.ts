@@ -139,6 +139,8 @@ export interface TableCell {
   rowspan?: number;
   align?: HAlign;
   fill?: Paint;
+  /** The cell's own borders, when they differ from the table-wide stroke. */
+  stroke?: Sides<Stroke>;
 }
 
 export interface TableRow {
@@ -201,7 +203,18 @@ export type Block =
    * Out-of-flow content (`position: absolute`) anchored to a corner of the
    * containing block; offsets point inwards from that corner.
    */
-  | { kind: "place"; x: "left" | "right"; y: "top" | "bottom"; dx: Length; dy: Length; children: Block[] }
+  | {
+      kind: "place";
+      x: "left" | "right";
+      y: "top" | "bottom";
+      dx: Length;
+      dy: Length;
+      /** `left` and `right` both set without a width: the box spans between them. */
+      span?: { left: Length; right: Length };
+      /** Offsets are from the page area inside the margins (`position: fixed`). */
+      pageArea?: boolean;
+      children: Block[];
+    }
   | { kind: "transform"; ops: TransformOp[]; children: Block[] };
 
 /** Content of one `@page` margin box. */

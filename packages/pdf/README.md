@@ -68,7 +68,7 @@ margins, backgrounds, margin boxes with page counters, named pages and `:first`;
 Unsupported CSS never disappears silently: every dropped declaration is listed
 in `warnings`, and `strict: true` turns them into a `TranspileError`.
 
-Images: data URIs, files inside `assets.baseDir`, and (opt-in) HTTP(S) with SSRF
+Images: inline `<svg>`, data URIs, files inside `assets.baseDir`, and (opt-in) HTTP(S) with SSRF
 protection (private IPs blocked at connect time, host allowlist, size and time
 limits).
 

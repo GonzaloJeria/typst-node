@@ -243,7 +243,8 @@ explícito; `@page`; saltos de página.
 **Posicionamiento y efectos:** `position: absolute` (anclado a la esquina que
 indiquen `top`/`right`/`bottom`/`left`, dentro del ancestro posicionado más
 cercano), `position: relative` con desplazamientos (también en línea),
-`position: fixed` (se repite en cada página, relativo a los bordes de la hoja);
+`position: fixed` (se repite en cada página, relativo al área dentro de los márgenes, como al
+imprimir en un navegador; con `left` y `right` ocupa el ancho entre ambos); `<svg>` inline;
 `transform` con `rotate`, `scale` y `translate`; `box-shadow` exterior con
 difuminado aproximado (la caja con sombra no se parte entre páginas).
 

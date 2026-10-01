@@ -1,4 +1,5 @@
 import { Cascade, type ComputedStyle, type PseudoElement } from "./css/cascade.js";
+import { serializeOuter } from "parse5";
 import { checkDeclaration } from "./css/support.js";
 import { parseColor, parseGradient, parseLength, parseShadows, parseTransform, parseUrl, splitValue, withAlpha, type LengthContext } from "./css/values.js";
 import { attr, isElement, isText, type Element, type Node } from "./dom.js";
@@ -20,9 +21,12 @@ const DEFAULT_GENERICS: NonNullable<ConvertOptions["genericFamilies"]> = {
   "system-ui": ["Inter"],
 };
 
-const SKIP = new Set(["head", "script", "style", "template", "noscript", "title", "meta", "link", "iframe", "object", "embed", "video", "audio", "canvas", "form", "input", "button", "select", "textarea", "svg", "math"]);
+/** Not document content: skipped silently. */
+const SKIP = new Set(["head", "script", "style", "template", "noscript", "title", "meta", "link"]);
+/** Content a PDF cannot show: dropped with a warning. */
+const DROPPED = new Set(["iframe", "object", "embed", "video", "audio", "canvas", "input", "button", "select", "textarea", "math"]);
 
-const INLINE = new Set(["a", "abbr", "b", "bdi", "bdo", "br", "cite", "code", "data", "del", "dfn", "em", "i", "img", "ins", "kbd", "label", "mark", "q", "s", "samp", "small", "span", "strike", "strong", "sub", "sup", "time", "tt", "u", "var", "wbr", "font", "big"]);
+const INLINE = new Set(["svg", "a", "abbr", "b", "bdi", "bdo", "br", "cite", "code", "data", "del", "dfn", "em", "i", "img", "ins", "kbd", "label", "mark", "q", "s", "samp", "small", "span", "strike", "strong", "sub", "sup", "time", "tt", "u", "var", "wbr", "font", "big"]);
 
 const HEADINGS: Record<string, 1 | 2 | 3 | 4 | 5 | 6> = { h1: 1, h2: 2, h3: 3, h4: 4, h5: 5, h6: 6 };
 
@@ -77,7 +81,7 @@ export class Converter {
         run.text(child.value, style.props);
         continue;
       }
-      if (!isElement(child) || SKIP.has(child.tagName)) continue;
+      if (!isElement(child) || this.#skip(child)) continue;
       const cs = this.style(child, style);
       const display = displayOf(child, cs);
       if (display === "none") continue;
@@ -154,7 +158,7 @@ export class Converter {
       content = [{ kind: "raw-block", value: textContent(el).replace(/\n$/, ""), ...(lang ? { lang } : {}) }];
     } else if (tag === "hr") {
       content = [{ kind: "rule" }];
-    } else if (tag === "img") {
+    } else if (tag === "img" || tag === "svg") {
       const img = this.#image(el, style);
       content = img ? [{ ...img }] : [];
     } else if (display === "flex" || display === "grid") {
@@ -191,7 +195,7 @@ export class Converter {
       return [];
     }
     if (position === "absolute" || position === "fixed") {
-      const placed = this.#place(style, content);
+      const placed = this.#place(style, content, position === "fixed");
       if (position === "absolute") return [placed];
       this.foreground.push(placed);
       return [];
@@ -231,7 +235,7 @@ export class Converter {
   }
 
   /** Anchors out-of-flow content to the corner implied by top/right/bottom/left. */
-  #place(s: ComputedStyle, children: Block[]): Block {
+  #place(s: ComputedStyle, children: Block[], pageArea = false): Block {
     const ctx = lengthContext(s);
     const len = (side: string) => {
       const l = parseLength(s.own.get(side) ?? "", ctx);
@@ -241,7 +245,11 @@ export class Converter {
     const [top, right, bottom, left] = [len("top"), len("right"), len("bottom"), len("left")];
     const x = left === undefined && right !== undefined ? "right" : "left";
     const y = top === undefined && bottom !== undefined ? "bottom" : "top";
-    return { kind: "place", x, y, dx: (x === "left" ? left : right) ?? zero, dy: (y === "top" ? top : bottom) ?? zero, children };
+    const placed: Extract<Block, { kind: "place" }> = { kind: "place", x, y, dx: (x === "left" ? left : right) ?? zero, dy: (y === "top" ? top : bottom) ?? zero, children };
+    const width = s.props.get("width");
+    if (left && right && (!width || width === "auto")) placed.span = { left, right };
+    if (pageArea) placed.pageArea = true;
+    return placed;
   }
 
   #applyBox(el: Element, s: ComputedStyle, content: Block[], positioned = false, shrink = false): Block[] {
@@ -285,8 +293,9 @@ export class Converter {
     // so it needs a block of its own even without visible styles.
     if (Object.keys(box).length === 0) return positioned ? [{ kind: "box", style: box, children: content }] : content;
     // CSS blocks stretch to the container; make that visible when the box is.
-    // Absolutely positioned boxes shrink to fit instead.
-    const outOfFlow = /^(absolute|fixed)$/.test(s.own.get("position") ?? "");
+    // Absolutely positioned boxes shrink to fit instead,
+    // unless `left` and `right` together give them a width.
+    const outOfFlow = /^(absolute|fixed)$/.test(s.own.get("position") ?? "") && !(s.own.get("left") && s.own.get("right"));
     if (!box.width && !box.align && !outOfFlow && !shrink && (box.fill || box.stroke || box.shadows || box.image) && el.tagName !== "table") {
       box.width = { value: 100, unit: "%" };
     }
@@ -323,7 +332,7 @@ export class Converter {
   #grid(el: Element, style: ComputedStyle, display: "flex" | "grid"): Block[] {
     const ctx = lengthContext(style);
     const cells: Block[][] = [];
-    const all = el.childNodes.filter(isElement).filter((c) => !SKIP.has(c.tagName));
+    const all = el.childNodes.filter(isElement).filter((c) => !this.#skip(c));
     const allStyles = all.map((c) => this.style(c, style));
     const visible = all.map((_, i) => i).filter((i) => allStyles[i]!.props.get("display") !== "none");
     const children = visible.map((i) => all[i]!);
@@ -380,7 +389,7 @@ export class Converter {
     this.#pseudo(run, el, style, "before");
     for (const child of el.childNodes) {
       if (isText(child)) run.text(child.value, style.props);
-      else if (isElement(child) && !SKIP.has(child.tagName)) {
+      else if (isElement(child) && !this.#skip(child)) {
         const cs = this.style(child, style);
         if (displayOf(child, cs) === "none") continue;
         this.#inlineInto(run, child, cs, style);
@@ -411,7 +420,7 @@ export class Converter {
     const tag = el.tagName;
     if (tag === "br") return run.push({ kind: "linebreak" }, true);
     if (tag === "wbr") return;
-    if (tag === "img") {
+    if (tag === "img" || tag === "svg") {
       const img = this.#image(el, style);
       if (img) run.push(img, false);
       return;
@@ -510,8 +519,16 @@ export class Converter {
     return Object.keys(box).length ? box : undefined;
   }
 
+  /** Elements left out of the document; content a PDF cannot show is reported. */
+  #skip(el: Element): boolean {
+    if (SKIP.has(el.tagName)) return true;
+    if (!DROPPED.has(el.tagName)) return false;
+    this.warnings.add(`<${el.tagName}> cannot be rendered in a PDF and was dropped`);
+    return true;
+  }
+
   #image(el: Element, style: ComputedStyle): Extract<Inline, { kind: "image" }> | undefined {
-    const src = attr(el, "src");
+    const src = el.tagName === "svg" ? svgDataUri(el, style.props.get("color")) : attr(el, "src");
     if (!src) return undefined;
     const ctx = lengthContext(style);
     const dim = (name: "width" | "height"): Size | undefined => {
@@ -550,6 +567,7 @@ export class Converter {
 
     const ctx = lengthContext(style);
     let firstCell: { el: Element; style: ComputedStyle } | undefined;
+    const borders: { cell: TableCell; sides: Sides<Stroke> | undefined }[] = [];
     const convertSection = (rows: Element[]): TableRow[] => {
       const grid = new OccupancyGrid();
       const out: TableRow[] = rows.map((tr, r) => {
@@ -562,7 +580,9 @@ export class Converter {
           let rowspan = clampSpan(attr(td, "rowspan"), 65534);
           if (attr(td, "rowspan") === "0" || rowspan > rows.length - r) rowspan = rows.length - r;
           grid.place(r, colspan, rowspan);
-          cells.push(this.#cell(td, cs, trStyle, colspan, rowspan));
+          const cell = this.#cell(td, cs, trStyle, colspan, rowspan);
+          borders.push({ cell, sides: sides((side) => borderStroke(cs.props, side, lengthContext(cs))) });
+          cells.push(cell);
         }
         return { cells };
       });
@@ -592,12 +612,21 @@ export class Converter {
     if (header.length) block.header = header;
     if (footer.length) block.footer = footer;
 
+    // Cell borders: one table-wide stroke when every cell has the same
+    // borders, else each cell keeps its own. The table's own border is drawn
+    // by its box, around the table only.
     const border = Number(attr(el, "border"));
-    const cellCtx = firstCell && lengthContext(firstCell.style);
-    const cellSides = firstCell && sides((side) => borderStroke(firstCell!.style.props, side, cellCtx!));
-    const same = cellSides && (["top", "right", "bottom", "left"] as const).map((k) => JSON.stringify(cellSides[k]));
-    const cellStroke = same && same.every((v) => v === same[0]) && cellSides.top ? cellSides.top : cellSides;
-    block.stroke = cellStroke ?? firstStroke(style, ctx) ?? (border > 0 ? { width: { value: 0.75, unit: "pt" }, color: "#000000" } : null);
+    const fallback: Stroke | null = border > 0 ? { width: { value: 0.75, unit: "pt" }, color: "#000000" } : null;
+    const key = (b: Sides<Stroke> | undefined) => JSON.stringify(b ?? null);
+    const uniform = borders.every((b) => key(b.sides) === key(borders[0]?.sides));
+    if (uniform) {
+      const cellSides = borders[0]?.sides;
+      const same = cellSides && (["top", "right", "bottom", "left"] as const).map((k) => JSON.stringify(cellSides[k]));
+      block.stroke = (same && same.every((v) => v === same[0]) && cellSides.top ? cellSides.top : cellSides) ?? fallback;
+    } else {
+      block.stroke = fallback;
+      for (const b of borders) if (b.sides) b.cell.stroke = b.sides;
+    }
 
     const pad = firstCell && parseLength(firstCell.style.props.get("padding-top") ?? "", lengthContext(firstCell.style));
     const cellpadding = attr(el, "cellpadding");
@@ -875,6 +904,17 @@ function clampSpan(value: string | undefined, max: number): number {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/** An inline `<svg>` as a standalone SVG image, the way `<img>` would load it. */
+function svgDataUri(el: Element, color: string | undefined): string {
+  let markup = serializeOuter(el);
+  if (!/^<svg[^>]*\sxmlns=/.test(markup)) markup = markup.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+  if (/xlink:/.test(markup) && !/\sxmlns:xlink=/.test(markup)) markup = markup.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+  // `currentColor` resolves against the CSS color around the inline SVG.
+  const c = color && parseColor(color);
+  if (c) markup = markup.replace(/currentColor/gi, c);
+  return `data:image/svg+xml;base64,${Buffer.from(markup, "utf8").toString("base64")}`;
+}
+
 function displayOf(el: Element, s: ComputedStyle): "none" | "inline" | "block" | "flex" | "grid" {
   const d = s.props.get("display");
   if (d === "none") return "none";
@@ -934,14 +974,6 @@ function borderStroke(
   const stroke: Stroke = { width, color: withAlpha(color, opacity) };
   if (style === "dashed" || style === "dotted") stroke.dash = style;
   return stroke;
-}
-
-function firstStroke(s: ComputedStyle, ctx: LengthContext): Stroke | undefined {
-  for (const side of ["top", "right", "bottom", "left"]) {
-    const st = borderStroke(s.props, side, ctx);
-    if (st) return st;
-  }
-  return undefined;
 }
 
 function parseTrackList(value: string, ctx: LengthContext): Size[] | undefined {

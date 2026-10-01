@@ -40,8 +40,10 @@ describe("position", () => {
   it("repeats fixed elements on every page", () => {
     const r = doc('<p>body</p><div style="position: fixed; top: 10mm; left: 10mm">WATERMARK</div>');
     expect(r.document.children).toHaveLength(1);
-    expect(r.document.page?.foreground).toMatchObject([{ kind: "place", dx: { value: 10, unit: "mm" } }]);
-    expect(r.source).toContain("foreground: place(");
+    expect(r.document.page?.foreground).toMatchObject([{ kind: "place", dx: { value: 10, unit: "mm" }, pageArea: true }]);
+    // Offsets count from the page area, inside the margins, as browsers print.
+    expect(r.source).toContain("foreground: context {");
+    expect(r.source).toContain("place(dx: m.left + 10mm, dy: m.top + 10mm, top + left");
   });
 });
 
