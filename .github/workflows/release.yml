@@ -69,6 +69,14 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
-      # changeset publish creates lightweight tags, which --follow-tags skips.
-      - name: Push release tags
-        run: git push origin --tags
+      # Tags for the current versions. changeset publish also tries to create
+      # them, but `git tag -m` needs a committer identity, which the runner
+      # lacks, and changesets ignores the failure. `changeset tag` skips tags
+      # that already exist, so re-running Release after a publish adds them.
+      - name: Tag and push release tags
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          pnpm changeset tag
+          git tag -l '@gjeria/*'
+          git push origin --tags
