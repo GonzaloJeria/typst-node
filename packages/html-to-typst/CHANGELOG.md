@@ -1,5 +1,11 @@
 # @gjeria/html-to-typst
 
+## 0.1.3
+
+### Patch Changes
+
+- a88a5cc: Per-corner `border-radius`, `overflow: hidden` clipping, `object-fit` on images (stretching by default, as in CSS) and `@font-face` fonts (TTF/OTF, loaded like images, with the CSS family mapped to the name inside the font file).
+
 ## 0.1.2
 
 ### Patch Changes
