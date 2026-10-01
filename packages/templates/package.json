@@ -1,7 +1,7 @@
 {
   "name": "@gjeria/pdf-templates",
   "version": "0.1.3",
-  "description": "Template-based PDFs: Handlebars + Tailwind templates from files or a database, rendered with Typst. CLI with live preview.",
+  "description": "Template-based PDFs: Handlebars + Tailwind (bundled) templates from files or a database, rendered with Typst. CLI with live preview.",
   "keywords": [
     "pdf",
     "templates",
@@ -55,22 +55,6 @@
   "dependencies": {
     "@gjeria/typst-html-pdf": "workspace:^",
     "handlebars": "^4.7.8"
-  },
-  "peerDependencies": {
-    "@tailwindcss/node": "^4.0.0",
-    "tailwindcss": "^4.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@tailwindcss/node": {
-      "optional": true
-    },
-    "tailwindcss": {
-      "optional": true
-    }
-  },
-  "devDependencies": {
-    "@tailwindcss/node": "^4.3.3",
-    "tailwindcss": "^4.3.3"
   },
   "publishConfig": {
     "access": "public",

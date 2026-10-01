@@ -4,7 +4,8 @@ import { PdfRenderer, type PageOptions, type PagesResult, type PdfRendererOption
 import { builtinHelpers, type FormatOptions } from "./helpers.js";
 import { googleFonts, prepareHtml } from "./prepare.js";
 import { fileSource, toStore, type TemplateDef, type TemplateSource, type TemplateStore } from "./sources.js";
-import { tailwindCss, usesTailwind } from "./tailwind.js";
+import { pageWidth, tailwindCss } from "@gjeria/typst-html-pdf";
+import { usesTailwind } from "./tailwind.js";
 
 export interface TemplatesOptions extends FormatOptions {
   /** Where named templates come from: a folder path, a store, or `(name) => TemplateDef`. */
@@ -13,7 +14,10 @@ export interface TemplatesOptions extends FormatOptions {
   renderer?: PdfRenderer;
   /** Options for the renderer this instance creates (sidecar processes, assets, fonts…). */
   rendererOptions?: PdfRendererOptions;
-  /** Generate Tailwind CSS: `true`, `false` or `"auto"` (when the template loads Tailwind). Default: `"auto"`. */
+  /**
+   * Tailwind CSS v4 (bundled): `true` (default), `false` for plain-CSS templates
+   * (no Tailwind reset), or `"auto"` (only when the template loads Tailwind).
+   */
   tailwind?: boolean | "auto";
   /** Download fonts from `<link href="https://fonts.googleapis.com/css2?…">`. Default: true. */
   googleFonts?: boolean;
@@ -125,13 +129,17 @@ export class PdfTemplates {
     let html = prepared.html;
     let css = [...prepared.css, def.css ?? ""].filter(Boolean).join("\n");
 
-    const mode = def.tailwind ?? this.#options.tailwind ?? "auto";
+    const mode = def.tailwind ?? this.#options.tailwind ?? true;
     if (mode === true || (mode === "auto" && (prepared.tailwindCdn || usesTailwind(html, css)))) {
       // Inline <style> blocks go through Tailwind too, so they can use @apply and theme variables.
       const inline: string[] = [];
       html = html.replace(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi, (_, body: string) => (inline.push(body), ""));
       try {
-        css = await tailwindCss(html, [...inline, css].join("\n"));
+        const source = [...inline, css].join("\n");
+        const width = pageWidth(def.page?.size ? `@page { size: ${def.page.size} }` : source);
+        const tw = await tailwindCss(`${html}\n${def.page?.header || ""}\n${def.page?.footer || ""}`, source, { pageWidth: width, ...(def.baseDir ? { baseDir: def.baseDir } : {}) });
+        css = tw.css;
+        warnings.push(...tw.warnings);
       } catch (err) {
         throw new TemplateError(name, err);
       }

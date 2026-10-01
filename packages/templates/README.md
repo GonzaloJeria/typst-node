@@ -1,14 +1,15 @@
 # @gjeria/pdf-templates
 
-PDFs a partir de templates: HTML con Handlebars y Tailwind, desde archivos o desde
-tu base de datos, renderizados con Typst (sin Chromium). Incluye una CLI con
-vista previa en vivo.
+PDFs a partir de templates: HTML con Handlebars y **Tailwind CSS**, desde
+archivos o desde tu base de datos, renderizados con Typst (sin Chromium).
+Incluye una CLI con vista previa en vivo.
 
 ```sh
-npm i @gjeria/pdf-templates tailwindcss @tailwindcss/node
+npm i @gjeria/pdf-templates
 ```
 
-`tailwindcss` y `@tailwindcss/node` solo hacen falta si usas Tailwind.
+Tailwind CSS v4 viene incluido y activado: no hay nada más que instalar ni
+configurar.
 
 ## En 1 minuto
 
@@ -30,10 +31,13 @@ const { pdf, warnings } = await templates.render("factura", { numero: "F-0001", 
 
 - **Handlebars** con escape automático de los datos, partials y helpers para
   dinero, fechas y números en español de Chile (configurables).
-- **Tailwind sin configurar nada**: genera el CSS de las clases que usa el
-  template, con tu `@theme`, `@apply` y `@layer`. El
-  `<script src="https://cdn.tailwindcss.com">` de un HTML hecho para el
-  navegador se detecta y se reemplaza solo.
+- **Tailwind incluido y activado por defecto**: genera el CSS solo de las
+  clases que usa el template, con tu `@theme`, `@apply` y `@utility`. Si el
+  HTML trae el `<script src="https://cdn.tailwindcss.com">` (hecho para el
+  navegador), simplemente se quita: el CSS ya está generado.
+- **Avisos de Tailwind**: clases mal escritas (`txt-red-500`), breakpoints que
+  no caben en la página (`lg:` en A4) y estados que no existen en papel
+  (`hover:`, `dark:`).
 - **Google Fonts**: un `<link href="https://fonts.googleapis.com/css2?family=Roboto…">`
   descarga la fuente en TTF y la usa.
 - **HTML del navegador tal cual**: los `<script>` se quitan (con aviso), los
@@ -54,7 +58,7 @@ const templates = createTemplates({
   // Se llama en cada render: lee la versión actual de la base de datos.
   source: async (nombre) => {
     const row = await db.plantillas.findOne({ nombre });
-    return row && { html: row.html, css: row.css, page: row.page, tailwind: true };
+    return row && { html: row.html, css: row.css, page: row.page };
   },
 });
 
@@ -64,7 +68,7 @@ const { pdf } = await templates.render("orden-de-compra", datos);
 Si ya tienes el template cargado, pásalo directamente:
 
 ```ts
-const { pdf } = await templates.render({ html: row.html, css: row.css, tailwind: true }, datos);
+const { pdf } = await templates.render({ html: row.html, css: row.css }, datos);
 ```
 
 El Handlebars compilado y el compilador de Tailwind se guardan en caché según
@@ -78,7 +82,7 @@ cuando cambia en la base de datos se usa la versión nueva sin reiniciar.
 | `page` | `{ size, margin, background, header, footer }`, ver abajo |
 | `partials` | `{ nombre: "<html>" }` para `{{> nombre}}` |
 | `sample` | datos de ejemplo, para la vista previa y `check` |
-| `tailwind` | `true`, `false` o `"auto"` (por defecto: si el template carga Tailwind o usa `@theme`/`@apply`) |
+| `tailwind` | `true` (por defecto), `false` para templates de CSS puro, o `"auto"` |
 | `baseDir` | carpeta para imágenes, fuentes y hojas de estilo relativas |
 
 Para ver y probar templates de la base de datos con la CLI, crea un módulo que
@@ -107,7 +111,7 @@ templates/
     template.html             (o index.html)
     style.css                 opcional
     data.json                 datos de ejemplo (vista previa y check)
-    template.json             opcional: { "tailwind": true, "page": { … } }
+    template.json             opcional: { "page": { … } } ("tailwind": false para CSS puro)
     partials/linea.html       partials solo de este template
     logo.png                  imágenes y fuentes, relativas a la carpeta
   informes/mensual/…          se pueden anidar: templates.render("informes/mensual", …)
@@ -159,7 +163,7 @@ Para agregar tus propios helpers usa `helpers: { iva: (n) => n * 0.19 }`.
 ```ts
 createTemplates({
   source: "./templates",            // carpeta, función (nombre) => template, o { get, list }
-  tailwind: "auto",                 // true | false | "auto"
+  tailwind: true,                   // false: templates de CSS puro, sin el reset de Tailwind
   googleFonts: true,                // descargar fuentes de <link> a Google Fonts
   helpers: {},                      // helpers propios
   partials: {},                     // partials para todos los templates
@@ -200,15 +204,43 @@ la lista de warnings y los datos como JSON editable. Al cambiar un archivo o
 editar los datos, se vuelve a renderizar. El navegador muestra la versión de
 pantalla, así que las reglas `@media print` solo se ven en el PDF.
 
+## Tailwind para PDFs
+
+**Recomendamos Tailwind para los templates.** El CSS que genera es predecible
+(propiedades simples, sin selectores complejos), así que el PDF sale casi
+idéntico a Chrome: la factura de ejemplo llega a 99,8 % de similitud. Además,
+el template completo cabe en un solo HTML, fácil de guardar en la base de
+datos, de revisar y de generar con herramientas de IA.
+
+Lo que conviene saber:
+
+- **El ancho de la página es la pantalla.** Una hoja A4 vertical mide 794 px:
+  aplican `sm:` (640 px) y `md:` (768 px), pero no `lg:` ni `xl:`. Diseña
+  *mobile first* sin prefijo o con `md:`. En A4 horizontal (1123 px) también
+  aplica `lg:`. El tamaño se toma de `page.size` o de `@page { size }`.
+- **`print:` siempre aplica** (`print:hidden`, `print:text-black`): sirve para
+  reutilizar en el PDF un HTML que también se muestra en pantalla.
+- **`hover:`, `focus:`, `dark:` y similares nunca aplican**, y lo avisan.
+- **Tema propio** en el CSS del template, con `@theme { --color-marca: #0f766e; --font-sans: Marca, sans-serif; }`,
+  y componentes con `@apply` o `@utility`. Las fuentes `font-sans`,
+  `font-serif` y `font-mono` usan las fuentes del PDF (Inter, Libertinus
+  Serif, DejaVu Sans Mono) salvo que las cambies.
+- **No se soportan `@plugin` ni `tailwind.config.js`**, porque no se ejecuta
+  JavaScript: todo se configura en CSS. Si un template lo usa, el error lo
+  explica.
+- **CSS puro:** usa `tailwind: false` (en el template o en `createTemplates`).
+  Así no se aplica el *preflight* de Tailwind, que quita márgenes y tamaños
+  por defecto de `h1`, `p`, listas, etc.
+
 ## Buenas prácticas
 
+- **Usa Tailwind** y revisa los avisos: una clase mal escrita no genera CSS y
+  no da error en el navegador, pero aquí aparece en `warnings`.
 - **Diseña mirando la vista previa** (`typst-pdf dev`), no el navegador: el PDF
   es lo que verá tu usuario.
 - **Calcula en los datos, presenta en el template.** Totales, impuestos y
   textos condicionales complejos quedan más claros en tu código. El template
   solo los formatea.
-- **Una hoja A4 mide ~794 px de ancho**: las clases `sm:` y `md:` aplican,
-  `lg:` y `xl:` no.
 - **Corre `typst-pdf check --strict` en CI** para detectar CSS no soportado
   antes de desplegar.
 - **Usa `allowedHosts`** si los templates cargan imágenes remotas.

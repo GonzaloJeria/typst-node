@@ -8,7 +8,8 @@
     "typst",
     "puppeteer-alternative",
     "invoice",
-    "report"
+    "report",
+    "tailwind"
   ],
   "author": "Gonzalo Jeria (https://github.com/GonzaloJeria)",
   "type": "module",
@@ -53,7 +54,8 @@
   },
   "dependencies": {
     "@gjeria/html-to-typst": "workspace:^",
-    "@gjeria/typst-compiler": "workspace:^"
+    "@gjeria/typst-compiler": "workspace:^",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "parse5": "^8.0.1"

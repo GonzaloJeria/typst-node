@@ -17,7 +17,7 @@ export function scaffoldFiles(title: string, tailwind: boolean): Record<string, 
       null,
       2,
     )}\n`,
-    "template.json": `${JSON.stringify({ ...(tailwind ? { tailwind: true } : {}), page: { size: "A4", margin: "15mm 15mm 20mm", footer: '<div style="font-size: 8pt; color: #71717a; text-align: right">Página {{page}} de {{pages}}</div>' } }, null, 2)}\n`,
+    "template.json": `${JSON.stringify({ ...(tailwind ? {} : { tailwind: false }), page: { size: "A4", margin: "15mm 15mm 20mm", footer: '<div style="font-size: 8pt; color: #71717a; text-align: right">Página {{page}} de {{pages}}</div>' } }, null, 2)}\n`,
   };
   if (tailwind) {
     files["template.html"] = `{{!-- ${title}: Handlebars (variables, each, helpers) + Tailwind. --}}
@@ -71,7 +71,8 @@ export function scaffoldFiles(title: string, tailwind: boolean): Record<string, 
   {{#if notas}}<p class="mt-6 text-zinc-500">{{notas}}</p>{{/if}}
 </div>
 `;
-    files["style.css"] = `/* Tailwind is added automatically. Add your theme or custom CSS here. */
+    files["style.css"] = `/* Tailwind is built in: only the classes the template uses generate CSS.
+   Customize the theme here, or add components with @apply / @utility. */
 @theme {
   --color-marca: #4f46e5;
 }

@@ -136,7 +136,7 @@ encarga de Handlebars, Tailwind, Google Fonts y los `<script>`/`<link>` del
 HTML, y trae la vista previa en vivo:
 
 ```sh
-npm i @gjeria/pdf-templates tailwindcss @tailwindcss/node
+npm i @gjeria/pdf-templates
 npx typst-pdf new factura && npx typst-pdf dev
 ```
 
@@ -155,9 +155,9 @@ básicas:
 2. **`await renderer.warmup()`** antes de aceptar tráfico, para que el primer
    PDF no pague el arranque.
 3. **`renderer.dispose()`** al apagar (`SIGTERM`), para cerrar los procesos.
-4. **Todo el CSS en el HTML (`<style>`) o en la opción `css`.** La librería no
-   ejecuta JavaScript ni descarga `<link rel="stylesheet">`: lo que el
-   navegador generaría o bajaría hay que dárselo ya resuelto.
+4. **Prefiere Tailwind** (`tailwind: true`), que da el resultado más fiel a
+   Chrome. El resto del CSS va en el HTML (`<style>`) o en la opción `css`: la
+   librería no ejecuta JavaScript ni descarga `<link rel="stylesheet">`.
 5. **Revisar `warnings`** mientras desarrollas: lista cada propiedad o valor
    que se descartó o aproximó. En tests, `strict: true` convierte esos
    warnings en error.
@@ -181,6 +181,7 @@ const renderer = new PdfRenderer({
   defaults: {                        // se mezclan con las opciones de cada render
     css: baseCss,                    // CSS aplicado después del <style> del documento
     rootFontSize: 12,                // tamaño raíz en pt (16px del navegador = 12pt)
+    tailwind: true,                  // Tailwind CSS v4 incluido: CSS para las clases del HTML
     strict: false,
     genericFamilies: { "sans-serif": ["Inter"], serif: ["Libertinus Serif"] },
     fontAliases: { "Mi Marca": "MiMarca Sans" },
@@ -240,34 +241,27 @@ tr, .tarjeta { break-inside: avoid }
 O con secciones (ver [Plantillas y secciones](#plantillas-y-secciones)), que
 además permiten portada sin encabezado y CSS distinto por parte.
 
-**Tailwind CSS v4.** Con `@gjeria/pdf-templates` no hay que hacer nada. Con
-la librería base, considera que Tailwind genera el CSS a partir de las clases
-que usa el HTML: el script del CDN lo hace en el navegador, y aquí hay que
-compilarlo en Node con `@tailwindcss/node` (`npm i tailwindcss @tailwindcss/node`):
+**Tailwind CSS v4 (recomendado).** Viene incluido: no hay nada que instalar.
+Con `@gjeria/pdf-templates` está activado por defecto; con la librería base
+se activa con `tailwind: true`:
 
 ```ts
-import { compile } from "@tailwindcss/node";
-
-let compiler: ReturnType<typeof compile> | undefined;
-
-/** CSS de Tailwind solo para las clases que usa `html`. */
-async function tailwindCss(html: string): Promise<string> {
-  // Compilar el CSS de entrada cuesta ~decenas de ms: una vez por proceso.
-  compiler ??= compile('@import "tailwindcss";', { base: process.cwd(), onDependency: () => {} });
-  const classes = new Set<string>();
-  for (const m of html.matchAll(/\sclass\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
-    for (const c of (m[1] ?? m[2])!.split(/\s+/)) if (c) classes.add(c);
-  }
-  return (await compiler).build([...classes]);
-}
-
 const html = `<div class="p-8 text-slate-800"><h1 class="text-2xl font-bold text-blue-600">Factura</h1></div>`;
-const { pdf } = await renderer.render(html, { css: await tailwindCss(html) });
+const { pdf, warnings } = await renderer.render(html, { tailwind: true });
 ```
 
-Para un tema propio, cambia la entrada a `@import "tailwindcss"; @theme {
---color-marca: #0f766e; }`. Si ya compilas Tailwind en el build (CLI o
-Vite), basta con leer el `.css` generado y pasarlo en `css`.
+Se genera CSS solo para las clases que usa el HTML. Los `<style>` del
+documento y la opción `css` pasan por Tailwind, así que pueden usar `@theme`,
+`@apply` y `@utility`. El `<script>` del CDN de Tailwind se ignora, porque el
+CSS ya está generado. `warnings` avisa de lo que no funciona en papel:
+
+- clases que no existen (`txt-red-500`)
+- breakpoints más anchos que la página (`lg:` en A4, que mide 794 px)
+- estados como `hover:` o `dark:`
+
+`print:` siempre aplica. No se soportan `@plugin` ni `tailwind.config.js`,
+porque toda la configuración va en CSS. Para usarlo en otro flujo, la librería
+exporta `tailwindCss(html, css)`.
 
 **Bootstrap 5.** Lee el CSS del paquete y pásalo tal cual:
 
@@ -338,7 +332,7 @@ res.end(Buffer.from(pdf));
 
 | En el navegador | Aquí |
 |---|---|
-| `<script>`, CDN de Tailwind | compilar el CSS en Node (arriba) |
+| `<script>`, CDN de Tailwind | `tailwind: true` (o `@gjeria/pdf-templates`) |
 | `<link rel="stylesheet">` | leer el archivo y pasarlo en `<style>` o `css` |
 | formularios, video, canvas, iframe | se omiten con warning; usa texto o imágenes |
 | `:hover`, modo oscuro | nunca aplican en papel |

@@ -11,7 +11,7 @@ import { createTemplates, type TemplatesOptions } from "./templates.js";
 const HELP = `typst-pdf: templates HTML → PDF (Handlebars + Tailwind + Typst)
 
 Uso:
-  typst-pdf new <nombre> [--plain]        crea templates/<nombre> con un ejemplo (Tailwind; --plain: CSS simple)
+  typst-pdf new <nombre> [--plain]        crea templates/<nombre> con un ejemplo en Tailwind (--plain: CSS puro)
   typst-pdf dev [--port 3333]             vista previa en vivo: PDF, navegador, warnings y datos
   typst-pdf render <nombre> [--data datos.json] [--out archivo.pdf]
   typst-pdf check [--strict]              renderiza todos los templates con su data.json y lista los warnings
@@ -56,7 +56,6 @@ async function main(argv: string[]): Promise<number> {
       console.log(`  creado  ${path.relative(process.cwd(), target)}`);
     }
     console.log(`\nListo. Míralo con:  npx typst-pdf dev${values.dir === "templates" ? "" : ` --dir ${values.dir}`}`);
-    if (!values.plain) console.log("(requiere: npm i tailwindcss @tailwindcss/node)");
     return 0;
   }
 

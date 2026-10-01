@@ -20,7 +20,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { createRequire } from "node:module";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { bundledFontsDir, PdfRenderer } from "../../src/index.js";
+import { bundledFontsDir, PdfRenderer, tailwindCss } from "../../src/index.js";
 import { decodePng, encodePng, type Image } from "../visual/png.js";
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
@@ -49,22 +49,17 @@ function findChromium(): string | undefined {
   return undefined;
 }
 
-/** Inlines the stylesheets fixtures reference by name. */
-function inlineStyles(html: string, name: string): string {
+/**
+ * Inlines the stylesheets fixtures reference by name. Tailwind is compiled
+ * with the bundled compiler (`tailwind: true`), so Chrome and the library get
+ * the same CSS users get.
+ */
+async function inlineStyles(html: string): Promise<string> {
+  const tw = /<link rel="stylesheet" href="tailwind">/.test(html) ? (await tailwindCss(html)).css : "";
   return html.replace(/<link rel="stylesheet" href="(tailwind|bootstrap)">/g, (_, lib: string) => {
-    const css = lib === "bootstrap" ? readFileSync(require.resolve("bootstrap/dist/css/bootstrap.css"), "utf8") : tailwind(html, name);
+    const css = lib === "bootstrap" ? readFileSync(require.resolve("bootstrap/dist/css/bootstrap.css"), "utf8") : tw;
     return `<style>\n${css}\n</style>`;
   });
-}
-
-function tailwind(html: string, name: string): string {
-  const dir = path.join(REPORT, ".tailwind", name);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "page.html"), html);
-  writeFileSync(path.join(dir, "in.css"), `@import "tailwindcss" source(none);\n@source "./page.html";\n`);
-  const cli = path.join(ROOT, "node_modules/.bin/tailwindcss");
-  execFileSync(cli, ["-i", path.join(dir, "in.css"), "-o", path.join(dir, "out.css")], { cwd: ROOT, stdio: "pipe" });
-  return readFileSync(path.join(dir, "out.css"), "utf8");
 }
 
 /** Makes Chromium use the library's bundled Inter wherever a sans-serif font is asked for. */
@@ -206,7 +201,7 @@ describe.skipIf(!CHROMIUM)("output compared with Chrome", () => {
 
   it.each(fixtures)("%s", async (file) => {
     const name = file.replace(/\.html$/, "");
-    const html = inlineStyles(readFileSync(path.join(FIXTURES, file), "utf8"), name);
+    const html = await inlineStyles(readFileSync(path.join(FIXTURES, file), "utf8"));
 
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });
