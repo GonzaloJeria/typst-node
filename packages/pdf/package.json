@@ -1,6 +1,6 @@
 {
   "name": "@gjeria/typst-html-pdf",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "HTML/CSS to PDF in Node.js without Chromium, powered by Typst.",
   "keywords": [
     "pdf",
