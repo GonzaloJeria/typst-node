@@ -52,6 +52,8 @@ export interface TextStyle {
   style?: "normal" | "italic";
   fill?: Color;
   tracking?: Length;
+  /** `font-variant-numeric: tabular-nums` / `proportional-nums`. */
+  numberWidth?: "tabular" | "proportional";
 }
 
 /** An outer `box-shadow` layer; lengths are absolute (pt). */
@@ -184,6 +186,8 @@ export type Block =
       children: Inline[];
       align?: HAlign;
       justify?: boolean;
+      /** CSS `text-indent` of the first line. */
+      indent?: Length;
       /** CSS `line-height` in em, when it differs from the document's. */
       lineHeight?: LineHeight;
       margins?: Margins;
@@ -217,6 +221,11 @@ export type Block =
       /** Per-cell stroke: one for all sides, or per side (e.g. only bottom rules). */
       stroke?: Stroke | Sides<Stroke> | null;
       inset?: Length | Sides<Length>;
+      /**
+       * The table has a width: its `auto` columns share the free space in
+       * proportion to their content, as in CSS automatic table layout.
+       */
+      fillAuto?: boolean;
       margins?: Margins;
     }
   | {

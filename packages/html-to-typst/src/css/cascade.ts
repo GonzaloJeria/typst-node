@@ -9,6 +9,7 @@ import { expandBox, parseColor, parseFontSize, parseNumber, splitValue } from ".
 const INHERITED = new Set([
   "color", "font-family", "font-weight", "font-style", "text-align", "line-height",
   "letter-spacing", "white-space", "list-style-type", "visibility", "text-transform",
+  "font-variant-numeric", "text-indent",
 ]);
 
 const SHORTHAND_BREAKS: Record<string, string> = {

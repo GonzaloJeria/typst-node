@@ -19,21 +19,45 @@ exports[`official compiler > matches the invoice snapshot 1`] = `
     "Factura N° 2026-001 "
     text(size: 16.67pt, "(borrador)")
   })))
-  grid(columns: (1fr, 1fr), gutter: 9pt, block(width: 100%, inset: 6pt, stroke: 0.75pt + rgb("#cccccc"), radius: 3pt, breakable: false, par({
+  grid(columns: (1fr, 1fr), gutter: 9pt, block(width: 100%, inset: 6.75pt, stroke: 0.75pt + rgb("#cccccc"), radius: 3pt, breakable: false, par({
     strong("Emisor")
     linebreak()
     "ACME S.A. "
     emph("#1 en \\"calidad\\"")
     linebreak()
     "RUT 76.000.000-0"
-  })), block(width: 100%, inset: 6pt, stroke: 0.75pt + rgb("#cccccc"), radius: 3pt, breakable: false, par({
+  })), block(width: 100%, inset: 6.75pt, stroke: 0.75pt + rgb("#cccccc"), radius: 3pt, breakable: false, par({
     strong("Cliente")
     linebreak()
     "Ada & Co. <ada@example.com>"
     linebreak()
     "Santiago"
   })))
-  table(columns: (50%, 1fr, 1fr, 1fr), stroke: 0.5pt + rgb("#999999"), inset: 3pt, table.header(repeat: true, table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Descripción"))), table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Cant."))), table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Precio"))), table.cell(align: center, fill: rgb("#f0f3f7"), text(weight: "bold", par("Total")))), par("Servicio *premium* con $variables$ y #hashtags"), table.cell(align: right, par("1")), table.cell(align: right, par("$100")), table.cell(align: right, par("$100")), table.cell(rowspan: 2, fill: rgb("#fafafa"), par("Licencias [anual]")), table.cell(align: right, fill: rgb("#fafafa"), par("2")), table.cell(align: right, fill: rgb("#fafafa"), par("$50")), table.cell(align: right, fill: rgb("#fafafa"), par("$100")), table.cell(colspan: 2, align: right, par("Descuento")), table.cell(align: right, par("-$10")), table.footer(table.cell(colspan: 3, align: right, par("Total")), table.cell(align: right, par(strong("$190")))))
+  layout(size => {
+    let c0 = text(weight: "bold", par("Descripción"))
+    let c1 = text(weight: "bold", par("Cant."))
+    let c2 = text(weight: "bold", par("Precio"))
+    let c3 = text(weight: "bold", par("Total"))
+    let c4 = par("Servicio *premium* con $variables$ y #hashtags")
+    let c5 = par("1")
+    let c6 = par("$100")
+    let c7 = par("$100")
+    let c8 = par("Licencias [anual]")
+    let c9 = par("2")
+    let c10 = par("$50")
+    let c11 = par("$100")
+    let c12 = par("Descuento")
+    let c13 = par("-$10")
+    let c14 = par("Total")
+    let c15 = par(strong("$190"))
+    let m1 = (c1, c5, c9).fold(0pt, (a, c) => calc.max(a, measure(c).width)) + 3pt + 3pt
+    let m2 = (c2, c6, c10).fold(0pt, (a, c) => calc.max(a, measure(c).width)) + 3pt + 3pt
+    let m3 = (c3, c7, c11, c13, c15).fold(0pt, (a, c) => calc.max(a, measure(c).width)) + 3pt + 3pt
+    let need = m1 + m2 + m3
+    let free = size.width - need - (50% * size.width)
+    let cols = if free >= 0pt and need > 0pt { (50%, m1 + free * (m1 / need), m2 + free * (m2 / need), m3 + free * (m3 / need),) } else { (50%, auto, auto, auto) }
+    table(columns: cols, stroke: 0.5pt + rgb("#999999"), inset: (top: 3.25pt, right: 3pt, bottom: 3.25pt, left: 3pt), table.header(repeat: true, table.cell(align: center, fill: rgb("#f0f3f7"), c0), table.cell(align: center, fill: rgb("#f0f3f7"), c1), table.cell(align: center, fill: rgb("#f0f3f7"), c2), table.cell(align: center, fill: rgb("#f0f3f7"), c3)), c4, table.cell(align: right, c5), table.cell(align: right, c6), table.cell(align: right, c7), table.cell(rowspan: 2, fill: rgb("#fafafa"), c8), table.cell(align: right, fill: rgb("#fafafa"), c9), table.cell(align: right, fill: rgb("#fafafa"), c10), table.cell(align: right, fill: rgb("#fafafa"), c11), table.cell(colspan: 2, align: right, c12), table.cell(align: right, c13), table.footer(table.cell(colspan: 3, align: right, c14), table.cell(align: right, c15)))
+  })
   text(size: 12pt, weight: "bold", block(width: 100%, above: 12pt, below: 12pt, align(right, par("Total a pagar: $190"))))
   block(inset: (left: 30pt), above: 10pt, below: 10pt, list(indent: 0pt, body-indent: 0pt, marker: box(width: 0pt, align(right, [•] + h(0.5em))), par("Pago a 30 días"), par({
     "Transferencia a "

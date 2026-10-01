@@ -1,4 +1,4 @@
-import { parseInsetFill, parseUrl, splitValue, parseColor, parseFontSize, parseGradient, parseLength, parseShadows, parseTransform } from "./values.js";
+import { parseInsetFill, parseUrl, splitValue, parseColor, parseFontSize, parseGradient, parseLength, parseNumber, parseShadows, parseTransform } from "./values.js";
 
 /**
  * Every CSS property the converter understands, with a validator for the
@@ -18,7 +18,7 @@ const isAbsolute = (v: string) => {
 const SIDE_PROPS = ["top", "right", "bottom", "left"].flatMap((side) => [
   [`padding-${side}`, isLength],
   [`border-${side}-width`, (v: string) => isLength(v) || ["thin", "medium", "thick"].includes(v)],
-  [`border-${side}-style`, oneOf("none", "hidden", "solid", "dashed", "dotted")],
+  [`border-${side}-style`, oneOf("none", "hidden", "solid", "dashed", "dotted", "double")],
   [`border-${side}-color`, isColor],
 ] as const);
 
@@ -44,7 +44,7 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   "text-transform": oneOf("none", "uppercase", "lowercase", "capitalize"),
   "letter-spacing": (v) => v === "normal" || isLength(v),
   "white-space": oneOf("normal", "nowrap", "pre", "pre-wrap", "pre-line", "break-spaces"),
-  "line-height": (v) => v === "normal" || /^\d*\.?\d+$/.test(v) || isLength(v),
+  "line-height": (v) => v === "normal" || parseNumber(v) !== undefined || isLength(v),
   display: oneOf(
     "none", "inline", "block", "inline-block", "flex", "grid", "list-item",
     "table", "table-row", "table-cell", "table-row-group", "table-header-group", "table-footer-group",
@@ -66,10 +66,12 @@ const SUPPORTED: Record<string, (value: string) => boolean> = {
   "object-position": oneOf("center", "50% 50%", "center center"),
   "border-collapse": oneOf("collapse"),
   "box-sizing": oneOf("border-box", "content-box"),
-  "text-indent": (v) => /^0(?:[a-z]+|%)?$/.test(v.trim()),
+  "text-indent": (v) => !v.includes("%") && !/\b(hanging|each-line)\b/.test(v),
   "font-feature-settings": oneOf("normal"),
   "font-variation-settings": oneOf("normal"),
   "font-variant": oneOf("normal"),
+  // Other numeric variants (ordinal, slashed-zero…) have no Typst equivalent and are ignored quietly.
+  "font-variant-numeric": () => true,
   "outline": oneOf("none", "0"),
   "outline-style": oneOf("none"),
   "outline-width": oneOf("0", "0px"),

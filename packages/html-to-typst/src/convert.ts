@@ -1,7 +1,7 @@
 import { Cascade, type ComputedStyle, type PseudoElement } from "./css/cascade.js";
 import { serializeOuter } from "parse5";
 import { checkDeclaration } from "./css/support.js";
-import { overColor, parseColor, parseGradient, parseInsetFill, parseLength, parseShadows, parseTransform, parseUrl, splitValue, toPt, withAlpha, type LengthContext } from "./css/values.js";
+import { overColor, parseColor, parseGradient, parseInsetFill, parseLength, parseNumber, parseShadows, parseTransform, parseUrl, splitValue, toPt, withAlpha, type LengthContext } from "./css/values.js";
 import { attr, isElement, isText, type Element, type Node, type TextNode } from "./dom.js";
 import type {
   BackgroundImage, Block, BoxStyle, Color, HAlign, Corners, ImageFit, Inline, InlineBoxStyle, Length, LineHeight, Margins, Radius, Paint, Sides, Size, Stroke, TableCell, TableRow, TextStyle, TransformOp, VAlign,
@@ -125,12 +125,18 @@ export class Converter {
   baseLineHeight: string | undefined;
 
   #paragraph(children: Inline[], style: ComputedStyle): Block {
+    // Text decoration on a block (`<p class="underline">`) applies to its text.
+    const deco = style.own.get("text-decoration-line") ?? "";
+    if (/\bline-through\b/.test(deco)) children = [{ kind: "strike", children }];
+    if (/\bunderline\b/.test(deco)) children = [{ kind: "underline", children }];
     const p: Extract<Block, { kind: "paragraph" }> = { kind: "paragraph", children };
     const lh = style.props.get("line-height");
     if (lh !== this.baseLineHeight) {
       const height = lineHeightOf(lh, style);
       if (height !== undefined) p.lineHeight = height;
     }
+    const indent = parseLength(style.props.get("text-indent") ?? "", lengthContext(style));
+    if (indent && indent.value !== 0 && indent.unit !== "%") p.indent = indent;
     const ta = style.props.get("text-align");
     if (ta === "justify") p.justify = true;
     else {
@@ -174,8 +180,11 @@ export class Converter {
       const heading: Extract<Block, { kind: "heading" }> = { kind: "heading", level: HEADINGS[tag]!, children: run.finish() };
       const a = hAlign(style.props.get("text-align"));
       if (a && a !== "start" && a !== "left") heading.align = a;
-      const textStyle = this.#textDiff(style, parent);
-      if (textStyle) heading.style = textStyle;
+      // Typst scales and bolds headings by level; CSS (and Tailwind's reset, which makes
+      // them plain text) decides both, so they are always written out.
+      const w = style.props.get("font-weight") ?? "normal";
+      const weight: TextStyle["weight"] = w === "bold" || w === "bolder" ? "bold" : /^\d+$/.test(w) ? Number(w) : "regular";
+      heading.style = { ...this.#textDiff(style, parent), size: { value: round(style.fontSize), unit: "pt" }, weight };
       const lh = style.props.get("line-height");
       if (lh !== this.baseLineHeight) {
         const height = lineHeightOf(lh, style);
@@ -325,7 +334,20 @@ export class Converter {
     const fill = backgroundOf(p, opacity);
     if (fill) box.fill = fill;
     const stroke = sides((side) => borderStroke(p, side, ctx, opacity));
-    if (stroke) box.stroke = stroke;
+    if (stroke) {
+      box.stroke = stroke;
+      // CSS borders take space between the edge and the padding; Typst strokes do not.
+      // (A collapsed table border sits on its cells' edges instead.)
+      const inner = { ...box.inset };
+      for (const side of ["top", "right", "bottom", "left"] as const) {
+        const b = stroke[side]?.width;
+        const pad = inner[side];
+        if (!b || b.unit !== "pt") continue;
+        if (!pad) inner[side] = b;
+        else if (pad.unit === "pt") inner[side] = { value: Math.round((pad.value + b.value) * 1e4) / 1e4, unit: "pt" };
+      }
+      if (el.tagName !== "table") box.inset = inner;
+    }
     const radius = radiusOf(p, ctx);
     if (radius) box.radius = radius;
     // Paper has no scrolling: anything but `visible` clips, as Chrome prints it.
@@ -773,11 +795,8 @@ export class Converter {
     });
     // A table with a width (its box sets it) spreads the extra space over its auto columns.
     const tableWidth = style.props.get("width") ?? attr(el, "width");
-    if (tableWidth && tableWidth !== "auto") {
-      for (let i = 0; i < columns.length; i++) if (columns[i] === "auto") columns[i] = { value: 1, unit: "fr" };
-    }
-
     const block: Extract<Block, { kind: "table" }> = { kind: "table", columns, body };
+    if (tableWidth && tableWidth !== "auto" && columns.includes("auto")) block.fillAuto = true;
     if (header.length) block.header = header;
     if (footer.length) block.footer = footer;
 
@@ -816,6 +835,26 @@ export class Converter {
           return l && l.unit !== "%" ? l : undefined;
         }) ?? {};
         if (norm(own) !== norm(tableInset)) cell.inset = { top: own.top ?? zero, right: own.right ?? zero, bottom: own.bottom ?? zero, left: own.left ?? zero };
+      }
+    }
+    // Collapsed borders take room in the rows they separate (half each); Typst
+    // strokes take none, so the rows grow by the border width instead.
+    const half = (st: Sides<Stroke> | undefined): number => {
+      const pt = (x: Stroke | undefined) => (x?.width.unit === "pt" ? x.width.value : 0);
+      return Math.max(pt(st?.top), pt(st?.bottom)) / 2;
+    };
+    const grow = (inset: Sides<Length>, by: number): Sides<Length> => {
+      const add = (l: Length | undefined) => (l === undefined || l.unit === "pt" ? { value: Math.round(((l?.value ?? 0) + by) * 1e4) / 1e4, unit: "pt" as const } : l);
+      return { ...inset, top: add(inset.top), bottom: add(inset.bottom) };
+    };
+    const tableStroke = block.stroke ? ("width" in block.stroke ? { top: block.stroke as Stroke, bottom: block.stroke as Stroke } : (block.stroke as Sides<Stroke>)) : undefined;
+    if (paddings.every(({ cell }) => !cell.stroke && !cell.inset)) {
+      const by = half(tableStroke);
+      if (by) block.inset = grow(tableInset, by);
+    } else {
+      for (const { cell } of paddings) {
+        const by = half(cell.stroke ?? tableStroke);
+        if (by) cell.inset = grow(cell.inset ?? tableInset, by);
       }
     }
     return block;
@@ -874,6 +913,11 @@ export class Converter {
       const st = s.props.get("font-style");
       if (st === "italic" || st === "oblique") out.style = "italic";
       else if (st === "normal") out.style = "normal";
+    }
+    if (changed("font-variant-numeric")) {
+      const v = s.props.get("font-variant-numeric") ?? "";
+      if (/\btabular-nums\b/.test(v)) out.numberWidth = "tabular";
+      else if (/\bproportional-nums\b|^normal$/.test(v)) out.numberWidth = "proportional";
     }
     if (changed("letter-spacing")) {
       const l = parseLength(s.props.get("letter-spacing") ?? "", lengthContext(s));
@@ -1223,8 +1267,10 @@ function borderStroke(
   const style = p.get(`border-${side}-style`);
   if (!style || style === "none" || style === "hidden") return undefined;
   const w = p.get(`border-${side}-width`) ?? "medium";
-  const width = w in BORDER_WIDTHS ? { value: BORDER_WIDTHS[w]!, unit: "pt" as const } : parseLength(w, ctx);
+  let width = w in BORDER_WIDTHS ? { value: BORDER_WIDTHS[w]!, unit: "pt" as const } : parseLength(w, ctx);
   if (!width || width.value <= 0) return undefined;
+  // Typst has no double lines: a single line as thick as one of them.
+  if (style === "double") width = { ...width, value: Math.round((width.value / 3) * 1e4) / 1e4 };
   const c = p.get(`border-${side}-color`);
   const color = (c && c !== "currentcolor" ? parseColor(c) : undefined) ?? parseColor(props.get("color") ?? "") ?? ("#000000" as Color);
   const stroke: Stroke = { width, color: withAlpha(color, opacity) };
@@ -1367,7 +1413,9 @@ function unescapeCss(s: string): string {
 export function lineHeightOf(value: string | undefined, s: ComputedStyle): LineHeight | undefined {
   const v = value?.trim();
   if (!v || v === "normal") return "normal";
-  if (/^\d*\.?\d+$/.test(v)) return round(Number(v));
+  // A number, also as `calc(1.25 / 0.875)` (Tailwind's text-* line heights).
+  const n = parseNumber(v);
+  if (n !== undefined) return round(n);
   const l = parseLength(v, lengthContext(s));
   if (!l) return undefined;
   if (l.unit === "%") return round(l.value / 100);

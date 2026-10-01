@@ -23,7 +23,8 @@ describe("Tailwind-style documents", () => {
   it("gives a table its explicit width", () => {
     const r = htmlToTypst(`<table style="width: 192px; border: 1px solid"><tr><td>NETO</td><td>1</td></tr></table>`);
     expect(r.source).toContain("block(width: 144pt");
-    expect(r.source).toContain("columns: (1fr, 1fr)");
+    // Auto columns share the free width in proportion to their content (CSS auto layout).
+    expect(r.source).toContain("let cols = if free >= 0pt and need > 0pt { (m0 + free * (m0 / need), m1 + free * (m1 / need),) }");
   });
 
   it("draws row borders on the row's cells", () => {
@@ -63,5 +64,45 @@ describe("composed sections", () => {
     const r = composeToTypst({ layout: { page: { size: "A4", footer: "{{page}}" } }, sections: [{ html: "<p>a</p>" }] });
     // Content before the first `set page` would push the document to page 2.
     expect(r.source).toMatch(/#\{\n\s+(\{\n\s+)?pagebreak\(weak: true\)/);
+  });
+});
+
+describe("Tailwind v4 output", () => {
+  it("reads gradients with an interpolation color space", () => {
+    const r = htmlToTypst(`<div style="background-image: linear-gradient(to right in oklab, #4f46e5 0%, #7c3aed 100%); height: 10px"></div>`);
+    expect(r.warnings).toEqual([]);
+    expect(r.source).toContain("gradient.linear(");
+  });
+
+  it("treats calc(infinity * 1px) radii as fully rounded", () => {
+    const r = htmlToTypst(`<div style="border-radius: calc(infinity * 1px); background: red">x</div>`);
+    expect(r.warnings).toEqual([]);
+    expect(r.source).toMatch(/radius: 75000pt/);
+  });
+
+  it("maps tabular-nums, text-indent and double borders", () => {
+    const r = htmlToTypst(`<p style="font-variant-numeric: tabular-nums; text-indent: calc(0.25rem * 8)">1</p><div style="border: 6px double #b45309">x</div>`);
+    expect(r.warnings).toEqual([]);
+    expect(r.source).toContain('number-width: "tabular"');
+    expect(r.source).toContain("first-line-indent: (amount: 24pt, all: true)");
+    expect(r.source).toContain('stroke: 1.5pt + rgb("#b45309")');
+  });
+
+  it("reads unitless calc() line heights", () => {
+    expect(htmlToTypst(`<body style="font-size: 14px; line-height: calc(1.25 / 0.875)"><p>x</p></body>`).source).toContain("css-line-height.with(1.43)");
+  });
+
+  it("keeps headings at their CSS size and weight (Tailwind resets them)", () => {
+    const r = htmlToTypst(`<style>h2 { font-size: inherit; font-weight: inherit }</style><h2>Título</h2>`);
+    expect(r.source).toContain('heading(level: 2, text(size: 12pt, weight: "regular", "Título"))');
+  });
+
+  it("counts borders in the box size, like CSS", () => {
+    const r = htmlToTypst(`<div style="border: 2px solid #000; padding: 4px">x</div>`);
+    expect(r.source).toContain("inset: 4.5pt");
+  });
+
+  it("underlines block text", () => {
+    expect(htmlToTypst(`<p style="text-decoration: underline">x</p>`).source).toContain('par(underline("x"))');
   });
 });

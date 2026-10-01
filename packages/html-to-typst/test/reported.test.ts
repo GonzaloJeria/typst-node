@@ -13,7 +13,7 @@ describe("table borders", () => {
       `<table><tr><th style="border-bottom:2px solid blue">H</th></tr><tr><td>x</td></tr></table>`,
     );
     expect(source).toContain("stroke: none");
-    expect(source).toContain('table.cell(align: center, stroke: (bottom: 1.5pt + rgb("#0000ff"))');
+    expect(source).toMatch(/table\.cell\(align: center, inset: [^)]*\), stroke: \(bottom: 1\.5pt \+ rgb\("#0000ff"\)\)/);
     expect(source).not.toMatch(/table\(columns: \(auto,\), stroke: \(/);
   });
 

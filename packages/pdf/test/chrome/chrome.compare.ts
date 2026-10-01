@@ -62,7 +62,10 @@ async function inlineStyles(html: string): Promise<string> {
   });
 }
 
-/** Makes Chromium use the library's bundled Inter wherever a sans-serif font is asked for. */
+/**
+ * Makes Chromium use the library's bundled Inter wherever a sans-serif font is
+ * asked for, and DejaVu Serif (which the library is also given) for serif.
+ */
 function fontconfig(): string {
   const file = path.join(REPORT, "fonts.conf");
   const sans = ["sans-serif", "sans", "Sans", "system-ui", "ui-sans-serif", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto",
@@ -78,9 +81,13 @@ function fontconfig(): string {
   <cachedir>${path.join(REPORT, ".fccache")}</cachedir>
   ${alias(sans, "Inter")}
   ${alias(mono, "DejaVu Sans Mono")}
+  ${alias(SERIF, "DejaVu Serif")}
 </fontconfig>`);
   return file;
 }
+
+const SERIF = ["serif", "ui-serif", "Georgia", "Cambria", "Times New Roman", "Times", "Liberation Serif"];
+const DEJAVU = "/usr/share/fonts/truetype/dejavu";
 
 /** Rasterizes a PDF with Typst, which can embed PDF pages as images. */
 function rasterizePdf(pdf: Uint8Array, name: string): Uint8Array[] {
@@ -183,7 +190,11 @@ const results: Record<string, number[]> = {};
 
 describe.skipIf(!CHROMIUM)("output compared with Chrome", () => {
   let browser: import("playwright-core").Browser;
-  const renderer = new PdfRenderer({ cli: { creationTimestamp: 0 } });
+  // Same serif font as Chromium (Libertinus, the library's default, is not a system font).
+  const renderer = new PdfRenderer({
+    cli: { creationTimestamp: 0, fonts: [{ dir: DEJAVU }] },
+    defaults: { genericFamilies: { serif: ["DejaVu Serif"] } },
+  });
 
   beforeAll(async () => {
     mkdirSync(REPORT, { recursive: true });

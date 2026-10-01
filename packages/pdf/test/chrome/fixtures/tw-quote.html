@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Cotización (tarjetas, badges, grid de 3 columnas, divide-y)</title>
+<link rel="stylesheet" href="tailwind">
+<style>@page { size: A4; margin: 0 }</style>
+</head>
+<body class="text-sm text-slate-700">
+  <div class="bg-gradient-to-r from-indigo-600 to-violet-600 px-12 py-10 text-white">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-200">Cotización</p>
+        <h1 class="mt-1 text-4xl font-extrabold tracking-tight">COT-2026-118</h1>
+      </div>
+      <div class="rounded-full bg-white/15 px-4 py-1.5 text-xs font-semibold ring-1 ring-white/30">Válida hasta 30/04/2026</div>
+    </div>
+  </div>
+  <main class="px-12 py-8">
+    <div class="grid grid-cols-3 gap-4">
+      <div class="rounded-xl border border-slate-200 p-4">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Cliente</p>
+        <p class="mt-1 font-semibold text-slate-900">Comercial Andes Ltda.</p>
+        <p class="text-slate-500">77.222.333-4</p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-4">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Contacto</p>
+        <p class="mt-1 font-semibold text-slate-900">Camila Rojas</p>
+        <p class="text-slate-500">camila@andes.cl</p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-4">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Ejecutivo</p>
+        <p class="mt-1 font-semibold text-slate-900">Diego Fuentes</p>
+        <p class="text-slate-500">+56 9 1234 5678</p>
+      </div>
+    </div>
+
+    <h2 class="mt-8 text-lg font-bold text-slate-900">Servicios</h2>
+    <div class="mt-3 divide-y divide-slate-200 rounded-xl border border-slate-200">
+      <div class="flex items-center justify-between px-5 py-4">
+        <div>
+          <p class="font-semibold text-slate-900">Plan Empresa <span class="ml-2 rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Recomendado</span></p>
+          <p class="text-slate-500">Hasta 50 usuarios, soporte prioritario</p>
+        </div>
+        <p class="text-base font-semibold tabular-nums text-slate-900">$890.000</p>
+      </div>
+      <div class="flex items-center justify-between px-5 py-4">
+        <div>
+          <p class="font-semibold text-slate-900">Implementación</p>
+          <p class="text-slate-500">Configuración inicial y migración de datos</p>
+        </div>
+        <p class="text-base font-semibold tabular-nums text-slate-900">$450.000</p>
+      </div>
+      <div class="flex items-center justify-between px-5 py-4">
+        <div>
+          <p class="font-semibold text-slate-900">Capacitación <span class="ml-2 rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">Opcional</span></p>
+          <p class="text-slate-500">Dos sesiones remotas de 2 horas</p>
+        </div>
+        <p class="text-base font-semibold tabular-nums text-slate-900">$120.000</p>
+      </div>
+    </div>
+
+    <div class="mt-6 flex justify-end">
+      <dl class="w-72 space-y-2">
+        <div class="flex justify-between"><dt class="text-slate-500">Subtotal</dt><dd class="tabular-nums">$1.460.000</dd></div>
+        <div class="flex justify-between"><dt class="text-slate-500">IVA (19%)</dt><dd class="tabular-nums">$277.400</dd></div>
+        <div class="flex justify-between border-t border-slate-200 pt-2 text-lg font-bold text-slate-900"><dt>Total</dt><dd class="tabular-nums">$1.737.400</dd></div>
+      </dl>
+    </div>
+
+    <div class="mt-10 rounded-xl bg-slate-50 p-5">
+      <p class="font-semibold text-slate-900">Condiciones</p>
+      <ol class="mt-2 list-decimal space-y-1 pl-5 text-slate-600">
+        <li>Precios en pesos chilenos, más IVA.</li>
+        <li>Pago 50% al aceptar y 50% contra entrega.</li>
+        <li>Plazo de implementación: 15 días hábiles.</li>
+      </ol>
+    </div>
+  </main>
+</body>
+</html>

@@ -129,6 +129,7 @@ function textArgs(s: TextStyle): Record<string, string | undefined> {
     style: s.style && str(s.style),
     fill: s.fill && color(s.fill),
     tracking: s.tracking && length(s.tracking),
+    "number-width": s.numberWidth && str(s.numberWidth),
   };
 }
 
@@ -288,6 +289,8 @@ function emitBlockBody(node: Block): string {
         "par",
         {
           justify: node.justify === undefined ? undefined : String(node.justify),
+          // CSS indents the first line of every block, not only after a previous paragraph.
+          "first-line-indent": node.indent && `(amount: ${length(node.indent)}, all: true)`,
         },
         inlines(node.children),
       );
@@ -345,14 +348,15 @@ function emitBlockBody(node: Block): string {
     case "styled-block":
       return call("text", textArgs(node.style), blocks(node.children));
     case "table": {
+      const names = node.fillAuto ? cellNames(node) : undefined;
       const parts: string[] = [];
-      if (node.header?.length) parts.push(call("table.header", { repeat: "true" }, ...rows(node.header, node.inset)));
-      parts.push(...rows(node.body, node.inset));
-      if (node.footer?.length) parts.push(call("table.footer", {}, ...rows(node.footer, node.inset)));
-      return call(
+      if (node.header?.length) parts.push(call("table.header", { repeat: "true" }, ...rows(node.header, node.inset, names?.names)));
+      parts.push(...rows(node.body, node.inset, names?.names));
+      if (node.footer?.length) parts.push(call("table.footer", {}, ...rows(node.footer, node.inset, names?.names)));
+      const table = call(
         "table",
         {
-          columns: `(${node.columns.map(size).join(", ")}${node.columns.length === 1 ? "," : ""})`,
+          columns: names ? "cols" : tuple(node.columns),
           stroke:
             node.stroke === undefined
               ? undefined
@@ -365,6 +369,7 @@ function emitBlockBody(node: Block): string {
         },
         ...parts,
       );
+      return names ? autoTableLayout(node, names, table) : table;
     }
     case "grid":
       return call(
@@ -409,19 +414,72 @@ function tuple(sizes: Size[]): string {
   return `(${sizes.map(size).join(", ")}${sizes.length === 1 ? "," : ""})`;
 }
 
-function rows(rs: TableRow[], inset?: Length | Sides<Length>): string[] {
+/** Variable names for the cells of an auto-layout table, and the cells of each column. */
+function cellNames(node: Extract<Block, { kind: "table" }>): { names: Map<TableCell, string>; columns: string[][] } {
+  const names = new Map<TableCell, string>();
+  const columns: string[][] = node.columns.map(() => []);
+  let k = 0;
+  for (const section of [node.header ?? [], node.body, node.footer ?? []]) {
+    // Rows still covered by a rowspan from above, per column.
+    let taken: number[] = [];
+    for (const row of section) {
+      let col = 0;
+      for (const c of row.cells) {
+        while ((taken[col] ?? 0) > 0) col++;
+        const name = `c${k++}`;
+        names.set(c, name);
+        const span = c.colspan ?? 1;
+        if (span === 1 && node.columns[col] === "auto") columns[col]?.push(name);
+        for (let j = 0; j < span; j++) taken[col + j] = c.rowspan ?? 1;
+        col += span;
+      }
+      taken = taken.map((t) => Math.max(0, (t ?? 0) - 1));
+    }
+  }
+  return { names, columns };
+}
+
+/**
+ * CSS automatic table layout for a table with a width: each `auto` column
+ * gets its content's natural width plus a share of the free space
+ * proportional to it. When the content does not fit, Typst's own `auto`
+ * sizing takes over (it wraps the widest columns first, as browsers do).
+ */
+function autoTableLayout(node: Extract<Block, { kind: "table" }>, cells: { names: Map<TableCell, string>; columns: string[][] }, table: string): string {
+  const all = [...(node.header ?? []), ...node.body, ...(node.footer ?? [])].flatMap((r) => r.cells);
+  const inset = node.inset ?? { value: 0, unit: "pt" as const };
+  const pad = "unit" in inset ? `2 * ${length(inset)}` : [inset.left, inset.right].map((l) => (l ? length(l) : "0pt")).join(" + ");
+  const autos = node.columns.flatMap((c, i) => (c === "auto" ? [i] : []));
+  const fixed = node.columns.flatMap((c) => (c === "auto" ? [] : [typeof c === "object" && c.unit === "%" && !c.offset ? `${num(c.value)}% * size.width` : size(c)]));
+  const lines = [
+    ...all.map((c) => `let ${cells.names.get(c)} = ${blocks(c.children)}`),
+    ...autos.map((i) => {
+      const list = cells.columns[i]!;
+      return `let m${i} = (${list.join(", ")}${list.length === 1 ? "," : ""}).fold(0pt, (a, c) => calc.max(a, measure(c).width)) + ${pad}`;
+    }),
+    `let need = ${autos.map((i) => `m${i}`).join(" + ")}`,
+    `let free = size.width - need${fixed.length ? ` - (${fixed.join(" + ")})` : ""}`,
+    `let cols = if free >= 0pt and need > 0pt { (${node.columns.map((c, i) => (c === "auto" ? `m${i} + free * (m${i} / need)` : size(c))).join(", ")},) } else { ${tuple(node.columns)} }`,
+    table,
+  ];
+  return `layout(size => {
+${lines.map((l) => indent(l)).join("\n")}
+})`;
+}
+
+function rows(rs: TableRow[], inset?: Length | Sides<Length>, names?: Map<TableCell, string>): string[] {
   return rs.flatMap((r) => {
-    if (!r.height || !r.cells.length) return r.cells.map((c) => cell(c));
+    if (!r.height || !r.cells.length) return r.cells.map((c) => cell(c, undefined, names?.get(c)));
     // A zero-width strut in the first cell keeps the row at least `height` tall (padding included).
     const own = r.cells[0]!.inset ?? inset;
     const pad = own && ("unit" in own ? [own, own] : [own.top, own.bottom]).filter((l): l is Length => !!l).map(length);
     const strut = `block(height: calc.max(0pt, ${[length(r.height), ...(pad ?? [])].join(" - ")}))`;
     const [first, ...rest] = r.cells;
-    return [cell(first!, strut), ...rest.map((c) => cell(c))];
+    return [cell(first!, strut, names?.get(first!)), ...rest.map((c) => cell(c, undefined, names?.get(c)))];
   });
 }
 
-function cell(c: TableCell, strut?: string): string {
+function cell(c: TableCell, strut?: string, name?: string): string {
   const named = {
     colspan: c.colspan && c.colspan > 1 ? num(c.colspan) : undefined,
     rowspan: c.rowspan && c.rowspan > 1 ? num(c.rowspan) : undefined,
@@ -431,7 +489,8 @@ function cell(c: TableCell, strut?: string): string {
     // Sides left out fall back to the table's stroke.
     stroke: c.stroke && `(${(["top", "right", "bottom", "left"] as const).filter((k) => c.stroke![k]).map((k) => `${k}: ${stroke(c.stroke![k]!)}`).join(", ")})`,
   };
-  const body = strut ? call("grid", { columns: "(0pt, 1fr)" }, strut, blocks(c.children)) : blocks(c.children);
+  const content = name ?? blocks(c.children);
+  const body = strut ? call("grid", { columns: "(0pt, 1fr)" }, strut, content) : content;
   return Object.values(named).some((v) => v !== undefined) ? call("table.cell", named, body) : body;
 }
 
