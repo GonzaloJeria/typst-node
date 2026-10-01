@@ -50,7 +50,7 @@ describe("composeToTypst", () => {
   const input = {
     layout: { css: "p { color: blue }", page: { size: "A5", header: "<b>ACME</b>", footer: "{{page}}/{{pages}}" } },
     sections: [
-      { html: "<p class=x>cover</p>", css: ".x { color: red }", page: { margin: "0", header: false as const } },
+      { html: "<p class=x>cover</p>", css: ".x { color: red }", page: { margin: "0", header: false as const, footer: false as const } },
       { html: "<p class=x>terms</p>" },
     ],
   };

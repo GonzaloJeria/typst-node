@@ -60,7 +60,7 @@ process.on("SIGTERM", () => renderer.dispose());
 
 Cascade, specificity, inheritance and CSS variables; colors, gradients,
 opacity; borders, radius, shadows, transforms; `position` (absolute, relative,
-fixed, running headers); tables with rowspan/colspan; flex rows and grids;
+fixed, running headers); tables with rowspan/colspan; flex rows (with `justify-content` and `align-items`) and grids;
 multi-column text; `height`/`min-height`; background images; `@page` size,
 margins, backgrounds, margin boxes with page counters, named pages and `:first`;
 `::before`/`::after`; lists; `line-height` and margins.
@@ -68,7 +68,7 @@ margins, backgrounds, margin boxes with page counters, named pages and `:first`;
 Unsupported CSS never disappears silently: every dropped declaration is listed
 in `warnings`, and `strict: true` turns them into a `TranspileError`.
 
-Images: data URIs, files inside `assets.baseDir`, and (opt-in) HTTP(S) with SSRF
+Images: inline `<svg>`, data URIs, files inside `assets.baseDir`, and (opt-in) HTTP(S) with SSRF
 protection (private IPs blocked at connect time, host allowlist, size and time
 limits).
 

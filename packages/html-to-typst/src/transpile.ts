@@ -73,6 +73,12 @@ export function htmlToTypst(html: string, options: TranspileOptions = {}): Trans
   const bands = bandsOf(sheet.pageBoxes);
   if (bands.header) page.header = bands.header;
   if (bands.footer) page.footer = bands.footer;
+  // Margin boxes live in the page margin: without one there is no room for them.
+  for (const [band, side] of [["header", "top"], ["footer", "bottom"]] as const) {
+    if (bands[band] && page.margin?.[side]?.value === 0) {
+      converter.warnings.add(`@page ${side} margin boxes are not drawn: margin-${side} is 0`);
+    }
+  }
   const first = sheet.namedPages[":first"];
   if (first) {
     const setup = pageSetup(first.page, ctx, converter.warnings, true);
@@ -154,7 +160,8 @@ const UA_CSS = `
 `;
 
 const PAPER: Record<string, string> = {
-  a3: "a3", a4: "a4", a5: "a5", b4: "iso-b4", b5: "iso-b5", letter: "us-letter", legal: "us-legal", ledger: "us-tabloid",
+  a3: "a3", a4: "a4", a5: "a5", a6: "a6", b4: "iso-b4", b5: "iso-b5", "jis-b4": "jis-b4", "jis-b5": "jis-b5",
+  letter: "us-letter", legal: "us-legal", ledger: "us-tabloid",
 };
 
 function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<string>, first = false): PageSetup | undefined {
@@ -167,12 +174,15 @@ function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<strin
     }
     if (d.property === "size") {
       const tokens = splitValue(d.value.toLowerCase());
+      const lengths: Length[] = [];
       for (const t of tokens) {
+        const l = parseLength(t, ctx);
         if (t === "landscape") page.flipped = true;
         else if (t === "portrait" || t === "auto") continue;
         else if (PAPER[t]) page.paper = PAPER[t];
+        else if (l && l.unit !== "%") lengths.push(l);
+        else warnings.add(`Unsupported @page size ignored: ${t}`);
       }
-      const lengths = tokens.map((t) => parseLength(t, ctx)).filter((l): l is Length => !!l && l.unit !== "%");
       if (lengths.length >= 1) {
         page.width = lengths[0]!;
         page.height = lengths[1] ?? lengths[0]!;
@@ -183,12 +193,13 @@ function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<strin
       const ls = box?.map((v) => parseLength(v, ctx));
       if (ls && ls.every((l) => l && l.unit !== "%")) {
         page.margin = { top: ls[0]!, right: ls[1]!, bottom: ls[2]!, left: ls[3]! };
-      }
+      } else warnings.add(`Unsupported @page margin ignored: ${d.value}`);
     } else if (/^background(-color|-image|-size|-position|-repeat)?$/.test(d.property)) {
       for (const [p, v] of expandShorthand(d.property, d.value)) background.set(p, v);
     } else if (/^margin-(top|right|bottom|left)$/.test(d.property)) {
       const l = parseLength(d.value, ctx);
       if (l && l.unit !== "%") page.margin = { ...page.margin, [d.property.slice(7)]: l };
+      else warnings.add(`Unsupported @page ${d.property} ignored: ${d.value}`);
     } else {
       warnings.add(`Unsupported @page property ignored: ${d.property}`);
     }

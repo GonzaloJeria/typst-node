@@ -77,6 +77,12 @@ function pageRun(run: PageRun): string {
 const LINE_GAP = "0.2em";
 
 /** Joins content values; a code block concatenates its expressions. */
+/** The current page's resolved margins (Typst's `auto` default included). */
+const PAGE_MARGINS =
+  "{ let v = page.margin; let d = 2.5 / 21 * calc.min(page.width, page.height); " +
+  "let r(x, full) = if x == auto { d } else if type(x) == relative { x.length + x.ratio * full } else if type(x) == ratio { x * full } else { x }; " +
+  "if v == auto { (left: d, right: d, top: d, bottom: d) } else { (left: r(v.left, page.width), right: r(v.right, page.width), top: r(v.top, page.height), bottom: r(v.bottom, page.height)) } }";
+
 function seq(items: string[]): string {
   if (items.length === 0) return "[]";
   if (items.length === 1) return items[0]!;
@@ -178,8 +184,11 @@ export function emitBlock(node: Block): string {
       );
       return node.align ? `align(${align(node.align)}, ${body})` : body;
     }
-    case "heading":
-      return call("heading", { level: String(node.level) }, inlines(node.children));
+    case "heading": {
+      const body = call("heading", { level: String(node.level) }, inlines(node.children));
+      // Full width, so an enclosing auto-width block cannot shrink it to its text.
+      return node.align ? `block(width: 100%, align(${align(node.align)}, ${body}))` : body;
+    }
     case "list": {
       const items = node.items.map(blocks);
       return node.ordered
@@ -198,9 +207,18 @@ export function emitBlock(node: Block): string {
     case "box":
       return boxBlock(node.style, node.children);
     case "place": {
-      const dx = node.x === "left" ? length(node.dx) : `-${length(node.dx)}`;
-      const dy = node.y === "top" ? length(node.dy) : `-${length(node.dy)}`;
-      return call("place", { dx, dy }, `${node.y} + ${node.x}`, blocks(node.children));
+      // Fixed boxes are offset from the page area, i.e. inside the margins.
+      const m = (side: string) => (node.pageArea ? `m.${side} + ` : "");
+      const neg = (side: string, l: Length) => (node.pageArea ? `-(${m(side)}${length(l)})` : `-${length(l)}`);
+      const dx = node.x === "left" ? `${m("left")}${length(node.dx)}` : neg("right", node.dx);
+      const dy = node.y === "top" ? `${m("top")}${length(node.dy)}` : neg("bottom", node.dy);
+      let body = blocks(node.children);
+      if (node.span) {
+        const margins = node.pageArea ? " - m.left - m.right" : "";
+        body = call("block", { width: `100%${margins} - ${length(node.span.left)} - ${length(node.span.right)}` }, body);
+      }
+      const placed = call("place", { dx, dy }, `${node.y} + ${node.x}`, body);
+      return node.pageArea ? `context {\n  let m = ${PAGE_MARGINS}\n${indent(placed)}\n}` : placed;
     }
     case "transform":
       return transform(node.ops, blocks(node.children));
@@ -235,7 +253,13 @@ export function emitBlock(node: Block): string {
         "grid",
         {
           columns: `(${node.columns.map(size).join(", ")}${node.columns.length === 1 ? "," : ""})`,
-          gutter: node.gutter && length(node.gutter),
+          ...(node.columnGutters
+            ? {
+                "column-gutter": `(${node.columnGutters.map(length).join(", ")}${node.columnGutters.length === 1 ? "," : ""})`,
+                "row-gutter": node.gutter && length(node.gutter),
+              }
+            : { gutter: node.gutter && length(node.gutter) }),
+          align: node.valign,
         },
         ...node.cells.map(blocks),
       );
@@ -264,6 +288,8 @@ function cell(c: TableCell): string {
     rowspan: c.rowspan && c.rowspan > 1 ? num(c.rowspan) : undefined,
     align: c.align && align(c.align),
     fill: c.fill && paint(c.fill),
+    // Sides left out fall back to the table's stroke.
+    stroke: c.stroke && `(${(["top", "right", "bottom", "left"] as const).filter((k) => c.stroke![k]).map((k) => `${k}: ${stroke(c.stroke![k]!)}`).join(", ")})`,
   };
   const body = blocks(c.children);
   return Object.values(named).some((v) => v !== undefined) ? call("table.cell", named, body) : body;
