@@ -744,7 +744,9 @@ export class Converter {
           if (attr(td, "rowspan") === "0" || rowspan > rows.length - r) rowspan = rows.length - r;
           grid.place(r, colspan, rowspan);
           const cell = this.#cell(td, cs, trStyle, style, colspan, rowspan);
-          borders.push({ cell, sides: sides((side) => borderStroke(cs.props, side, lengthContext(cs))) });
+          // Row borders (`border-b` on a <tr>) are drawn by its cells, as with border-collapse.
+          const rowSide = (side: "top" | "bottom") => borderStroke(trStyle.props, side, lengthContext(trStyle));
+          borders.push({ cell, sides: sides((side) => borderStroke(cs.props, side, lengthContext(cs)) ?? (side === "top" || side === "bottom" ? rowSide(side) : undefined)) });
           paddings.push({ cell, style: cs });
           cells.push(cell);
         }

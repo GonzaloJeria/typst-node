@@ -29,7 +29,10 @@ export function emitDocument(doc: Document): string {
   lines.push("#show heading: it => it.body");
   // Typst drops spacing at the start of the page; CSS keeps the first block's
   // top margin (it does not collapse through the page). An empty block keeps it.
-  lines.push(`#${seq(["block(height: 0pt)", ...emitBlocks(doc.children)])}`);
+  // Page runs (composed sections) bring their own, after their `set page`: content before
+  // a `set page` would start a new page and leave the first one blank.
+  const strut = doc.children[0]?.kind === "page-run" ? [] : ["block(height: 0pt)"];
+  lines.push(`#${seq([...strut, ...emitBlocks(doc.children)])}`);
   return lines.join("\n") + "\n";
 }
 
@@ -480,14 +483,18 @@ function boxBlock(s: BoxStyle, children: Block[]): string {
     clip: s.clip ? "true" : undefined,
   };
   const content = min ? "body(h != auto)" : body;
-  let b = s.image ? withBackground(s, args, spacing, content) : call("block", { ...args, ...spacing }, content);
+  // Spacing set inside a `layout` does not reach the surrounding flow: wrapped boxes get it outside.
+  const wrapped = !!(min || s.image || s.shadows?.length);
+  const inner = wrapped ? { breakable: spacing.breakable } : spacing;
+  let b = s.image ? withBackground(s, args, inner, content) : call("block", { ...args, ...inner }, content);
   if (s.shadows?.length) b = shadowed(b, s);
   if (min) {
     const probe = call("block", { ...args, height: undefined, fill: undefined }, "body(false)");
     // `free`: whether flex-column spacers may take the box's spare height.
     b = ["layout(size => {", indent(`let body(free) = ${body}`), `  let h = measure(${probe}, width: size.width).height`, `  let h = if h < ${min} { ${min} } else { auto }`, indent(b), "})"].join("\n");
   }
-  return s.align ? `align(${align(s.align)}, ${b})` : b;
+  if (s.align) b = `align(${align(s.align)}, ${b})`;
+  return wrapped && (spacing.above || spacing.below) ? call("block", { above: spacing.above, below: spacing.below }, b) : b;
 }
 
 /** Paints a background image under the box content, clipped to the box. */

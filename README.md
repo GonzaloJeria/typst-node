@@ -5,6 +5,7 @@ Generación de PDF en Node.js sin navegador: HTML/CSS → Typst → PDF.
 | Paquete | Estado |
 |---|---|
 | [`@gjeria/typst-compiler`](packages/typst-compiler) | `TypstBackend` + `CliBackend` (binario oficial de Typst por documento) + `SidecarBackend` (procesos Typst persistentes); cero dependencias de runtime |
+| [`@gjeria/pdf-templates`](packages/templates) | Templates Handlebars + Tailwind desde archivos o base de datos, Google Fonts, y la CLI `typst-pdf` con vista previa en vivo |
 | [`@gjeria/typst-html-pdf`](packages/pdf) | Fachada `htmlToPdf()` / `PdfRenderer`: transpila, resuelve imágenes (data URI, archivos locales acotados a `baseDir`, HTTP con protección SSRF) y compila |
 | [`typst-sidecar`](crates/typst-sidecar) | Binario Rust propio sobre los crates oficiales de Typst: compila por JSON sobre stdin/stdout sin reiniciar entre documentos |
 | [`@gjeria/html-to-typst`](packages/html-to-typst) | HTML/CSS → IR → Typst: parse5, cascada CSS propia (selectores, especificidad, herencia, shorthands, `@page`, `@media print`), tablas con rowspan/colspan, flex/grid básicos, saltos de página |
@@ -129,8 +130,25 @@ const { pdf, warnings } = await typst.compile({
 
 ## Guía de uso y buenas prácticas
 
-Todo lo que una aplicación necesita está en `@gjeria/typst-html-pdf`. Las
-reglas básicas:
+**¿Generas PDFs desde templates?** (HTML con variables, guardado en archivos o
+en la base de datos). Usa [`@gjeria/pdf-templates`](packages/templates): se
+encarga de Handlebars, Tailwind, Google Fonts y los `<script>`/`<link>` del
+HTML, y trae la vista previa en vivo:
+
+```sh
+npm i @gjeria/pdf-templates tailwindcss @tailwindcss/node
+npx typst-pdf new factura && npx typst-pdf dev
+```
+
+```ts
+import { createTemplates } from "@gjeria/pdf-templates";
+
+const templates = createTemplates({ source: async (nombre) => db.plantillas.findOne({ nombre }) });
+const { pdf } = await templates.render("orden-de-compra", datos);
+```
+
+Lo que sigue describe la librería base, `@gjeria/typst-html-pdf`. Las reglas
+básicas:
 
 1. **Un `PdfRenderer` por proceso**, creado al arrancar, nunca uno por
    request: cada uno levanta sus propios procesos de Typst.
@@ -197,7 +215,10 @@ opción `css`.
 const { pdf } = await renderer.render("<h1>Hola</h1><p>Mundo</p>", { css: "h1 { color: #2563eb }" });
 ```
 
-**Tamaño y márgenes de página.** Con CSS estándar:
+**Tamaño y márgenes de página.** Sin `@page { margin }` la página no tiene
+margen, como en el `page.pdf()` de Puppeteer y Playwright; los encabezados y
+pies de página (cajas `@top-*`/`@bottom-*` o `header`/`footer` de las
+secciones) reservan un margen por defecto. Con CSS estándar:
 
 ```css
 @page { size: A4; margin: 20mm 15mm }          /* también letter, A4 landscape, 210mm 297mm */
@@ -219,9 +240,10 @@ tr, .tarjeta { break-inside: avoid }
 O con secciones (ver [Plantillas y secciones](#plantillas-y-secciones)), que
 además permiten portada sin encabezado y CSS distinto por parte.
 
-**Tailwind CSS v4.** Tailwind genera el CSS a partir de las clases que usa el
-HTML; el script del CDN lo hace en el navegador, aquí hay que compilarlo en
-Node con `@tailwindcss/node` (`npm i tailwindcss @tailwindcss/node`):
+**Tailwind CSS v4.** Con `@gjeria/pdf-templates` no hay que hacer nada. Con
+la librería base, considera que Tailwind genera el CSS a partir de las clases
+que usa el HTML: el script del CDN lo hace en el navegador, y aquí hay que
+compilarlo en Node con `@tailwindcss/node` (`npm i tailwindcss @tailwindcss/node`):
 
 ```ts
 import { compile } from "@tailwindcss/node";
@@ -463,7 +485,7 @@ variables), anidado de reglas (`&`), selectores nivel 4 (`:is()`, `:where()`,
 `:not()`, `:has()`, `+`, `~`, `:nth-child(An+B of S)`, `:*-of-type`,
 `:empty`, clases escapadas como `.md\:flex` o `.w-1\/2`), colores
 `oklch()`/`oklab()`/`lab()`/`lch()`/`hwb()`/`color()`/`color-mix()`,
-`min()`/`max()`/`clamp()`, unidades `vw`/`vh` (relativas a la página),
+`min()`/`max()`/`clamp()`, unidades `vw`/`vh` (relativas al área de la página, dentro de los márgenes),
 `ch`/`ex`/`lh`, propiedades lógicas (`padding-inline`, `margin-block-start`,
 `inset-inline`…), el shorthand `font`, `box-sizing` en anchos y altos,
 `grid-template-columns` con `repeat()` y `minmax()`, y texto suelto dentro de
@@ -479,13 +501,19 @@ lista; `flex-wrap: wrap` (ítems en `%` se reparten en filas, como la grilla
 `.row`/`.col-*` de Bootstrap; los demás fluyen y saltan de línea, como
 etiquetas o chips); `flex-direction: column` con `align-items` y `gap`;
 `row-gap`/`column-gap`; `calc()` que mezcla `%` con longitudes
-(`calc(100% - 2rem)`). Estados interactivos (`:hover`, `:focus`…) nunca aplican en papel y
+(`calc(100% - 2rem)`); `justify-content` en columnas flex con alto o
+`min-height` (un pie de página empujado al final con `justify-between`);
+`min-height` que deja al contenido usar el alto libre; filas de tabla con
+altura, tablas con ancho propio, bordes en `<tr>` y padding distinto por
+celda. Estados interactivos (`:hover`, `:focus`…) nunca aplican en papel y
 no generan warnings. Si un valor no se puede renderizar y la regla traía un
 fallback (`display: block; display: -webkit-box`), se usa el fallback.
 
 **Posicionamiento y efectos:** `position: absolute` (anclado a la esquina que
 indiquen `top`/`right`/`bottom`/`left`, dentro del ancestro posicionado más
-cercano), `position: relative` con desplazamientos (también en línea),
+cercano), `position: relative` con desplazamientos (también en línea); los hijos
+`absolute` se miden desde el borde interior del padding y no cuentan como
+ítems flex/grid;
 `position: fixed` (se repite en cada página, relativo al área dentro de los márgenes, como al
 imprimir en un navegador; con `left` y `right` ocupa el ancho entre ambos); `<svg>` inline;
 `transform` con `rotate`, `scale` y `translate`; `box-shadow` exterior con
@@ -518,7 +546,7 @@ fluye columna a columna entre páginas). Ideal para términos y condiciones.
 inline, combinables con `auto`) y `line-height` (número, %, longitud;
 `normal` ≈ 1.2).
 
-**Todavía no:** `justify-content` en columnas flex, `min()`/`max()` que
+**Todavía no:** `min()`/`max()` que
 comparan `%` con longitudes, `@container`, fuentes WOFF/WOFF2, `float`, fondos repetidos (`repeat`) o con varias capas, sombras `inset`, `skew`/`matrix`, desplazamientos en `%`,
 márgenes o tamaño distintos en `@page :first`, `@page :left/:right`,
 `@page nombre:first`, `column-width`, `column-rule`, `column-span`.
@@ -558,9 +586,10 @@ dibujo de cada letra.
 
 | Plantilla | 0.1.1 | Ahora |
 | --- | --- | --- |
-| Tailwind v4 (factura) | 81,8 % | 98,4 % |
+| Tailwind v4 (factura) | 81,8 % | 99,8 % |
+| Tailwind v4 (orden de compra, sin `@page`) | — | 94,2 % |
 | HTML simple, sin framework | 72,8 % | 94,8 % |
-| CSS moderno (capas, anidado, `oklch`) | 75,6 % | 90,0 % |
-| Bootstrap 5 (reporte) | 67,5 % | 84,4 % |
+| CSS moderno (capas, anidado, `oklch`) | 75,6 % | 94,6 % |
+| Bootstrap 5 (reporte) | 67,5 % | 84,6 % |
 | Flex con `wrap`, columnas y `calc()` | 49,4 % | 82,1 % |
 | Efectos (esquinas, `overflow`, `object-fit`, sombras) | — | 76,7 % |

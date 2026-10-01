@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToTypst } from "../src/index.js";
+import { composeToTypst, htmlToTypst } from "../src/index.js";
 
 describe("page defaults like Chrome's page.pdf()", () => {
   it("has no page margin without @page margin", () => {
@@ -26,6 +26,11 @@ describe("Tailwind-style documents", () => {
     expect(r.source).toContain("columns: (1fr, 1fr)");
   });
 
+  it("draws row borders on the row's cells", () => {
+    const r = htmlToTypst(`<table><tr style="border-bottom: 1px solid #ccc"><td>1</td><td>2</td></tr></table>`);
+    expect(r.source).toContain('bottom: 0.75pt + rgb("#cccccc")');
+  });
+
   it("keeps a table row at least its height", () => {
     const r = htmlToTypst(`<table><tr style="height: 40px"><td></td></tr></table>`);
     expect(r.source).toContain("block(height: calc.max(0pt, 30pt");
@@ -50,5 +55,13 @@ describe("Tailwind-style documents", () => {
   it("does not make absolute children flex items", () => {
     const r = htmlToTypst(`<div style="display: flex; position: relative"><div>a</div><div style="position: absolute; top: 0">b</div></div>`);
     expect(r.source).toContain("columns: (auto,)");
+  });
+});
+
+describe("composed sections", () => {
+  it("does not start with a blank page", () => {
+    const r = composeToTypst({ layout: { page: { size: "A4", footer: "{{page}}" } }, sections: [{ html: "<p>a</p>" }] });
+    // Content before the first `set page` would push the document to page 2.
+    expect(r.source).toMatch(/#\{\n\s+(\{\n\s+)?pagebreak\(weak: true\)/);
   });
 });
