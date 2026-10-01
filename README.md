@@ -127,6 +127,204 @@ const { pdf, warnings } = await typst.compile({
 });
 ```
 
+## Guía de uso y buenas prácticas
+
+Todo lo que una aplicación necesita está en `@gjeria/typst-html-pdf`. Las
+reglas básicas:
+
+1. **Un `PdfRenderer` por proceso**, creado al arrancar, nunca uno por
+   request: cada uno levanta sus propios procesos de Typst.
+2. **`await renderer.warmup()`** antes de aceptar tráfico, para que el primer
+   PDF no pague el arranque.
+3. **`renderer.dispose()`** al apagar (`SIGTERM`), para cerrar los procesos.
+4. **Todo el CSS en el HTML (`<style>`) o en la opción `css`.** La librería no
+   ejecuta JavaScript ni descarga `<link rel="stylesheet">`: lo que el
+   navegador generaría o bajaría hay que dárselo ya resuelto.
+5. **Revisar `warnings`** mientras desarrollas: lista cada propiedad o valor
+   que se descartó o aproximó. En tests, `strict: true` convierte esos
+   warnings en error.
+6. **Escapar los datos** que insertas en el HTML (nombres, direcciones,
+   descripciones): usa un motor de plantillas que escape (Handlebars,
+   EJS con `<%= %>`, JSX/`renderToStaticMarkup`) o escapa tú `& < > " '`.
+
+### Opciones
+
+```ts
+const renderer = new PdfRenderer({
+  // Backend: por defecto el sidecar (procesos Typst persistentes, el más rápido).
+  sidecar: {
+    processes: 2,                    // documentos en paralelo; por defecto, nº de CPUs (~60 MB c/u)
+    timeoutMs: 15_000,               // por documento; el proceso que se pasa se reinicia
+    maxCompilationsPerProcess: 500,  // recicla procesos para acotar la memoria
+    fonts: [{ dir: "/app/fonts" }],  // fuentes para todos los documentos
+    creationTimestamp: 0,            // fecha fija: PDFs idénticos byte a byte (tests)
+  },
+  bundledFonts: true,                // Inter como sans-serif (por defecto)
+  defaults: {                        // se mezclan con las opciones de cada render
+    css: baseCss,                    // CSS aplicado después del <style> del documento
+    rootFontSize: 12,                // tamaño raíz en pt (16px del navegador = 12pt)
+    strict: false,
+    genericFamilies: { "sans-serif": ["Inter"], serif: ["Libertinus Serif"] },
+    fontAliases: { "Mi Marca": "MiMarca Sans" },
+    assets: {
+      baseDir: "/app/templates",     // rutas relativas y file: (sin baseDir se rechazan)
+      allowRemote: true,             // http(s): imágenes y @font-face; NO hojas de estilo
+      allowedHosts: ["cdn.miempresa.com", /\.amazonaws\.com$/],
+      timeoutMs: 10_000,
+      maxAssetBytes: 10 * 1024 * 1024,
+      maxTotalBytes: 50 * 1024 * 1024,
+      onError: "skip",               // imagen que falla: warning en vez de error
+      resolve: async (src) => undefined, // resolver propio (S3, BD…); undefined = el normal
+    },
+  },
+});
+```
+
+Cada llamada acepta las mismas opciones (`renderer.render(html, { css, assets,
+fonts, timeoutMs, signal })`) y se combinan con `defaults`: el `css` se
+concatena, `assets` y `fonts` se mezclan.
+
+El resultado trae `pdf` (`Uint8Array`), `warnings` (lo que el transpilador
+descartó o aproximó), `diagnostics` (avisos del compilador Typst) y `source`
+(el Typst generado, útil para depurar).
+
+### Casos de uso
+
+**HTML suelto.** Si no hay `<html>`/`<head>`, igual funciona: el CSS va en la
+opción `css`.
+
+```ts
+const { pdf } = await renderer.render("<h1>Hola</h1><p>Mundo</p>", { css: "h1 { color: #2563eb }" });
+```
+
+**Tamaño y márgenes de página.** Con CSS estándar:
+
+```css
+@page { size: A4; margin: 20mm 15mm }          /* también letter, A4 landscape, 210mm 297mm */
+@page { @bottom-center { content: "Página " counter(page) " de " counter(pages) } }
+.salto { break-before: page }                   /* o page-break-before: always */
+tr, .tarjeta { break-inside: avoid }
+```
+
+**Encabezado con logo en cada página.** Con `position: running()`:
+
+```html
+<style>
+  .header { position: running(header) }
+  @page { margin-top: 30mm; @top-center { content: element(header) } }
+</style>
+<div class="header"><img src="logo.svg" style="height: 12mm"></div>
+```
+
+O con secciones (ver [Plantillas y secciones](#plantillas-y-secciones)), que
+además permiten portada sin encabezado y CSS distinto por parte.
+
+**Tailwind CSS v4.** Tailwind genera el CSS a partir de las clases que usa el
+HTML; el script del CDN lo hace en el navegador, aquí hay que compilarlo en
+Node con `@tailwindcss/node` (`npm i tailwindcss @tailwindcss/node`):
+
+```ts
+import { compile } from "@tailwindcss/node";
+
+let compiler: ReturnType<typeof compile> | undefined;
+
+/** CSS de Tailwind solo para las clases que usa `html`. */
+async function tailwindCss(html: string): Promise<string> {
+  // Compilar el CSS de entrada cuesta ~decenas de ms: una vez por proceso.
+  compiler ??= compile('@import "tailwindcss";', { base: process.cwd(), onDependency: () => {} });
+  const classes = new Set<string>();
+  for (const m of html.matchAll(/\sclass\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+    for (const c of (m[1] ?? m[2])!.split(/\s+/)) if (c) classes.add(c);
+  }
+  return (await compiler).build([...classes]);
+}
+
+const html = `<div class="p-8 text-slate-800"><h1 class="text-2xl font-bold text-blue-600">Factura</h1></div>`;
+const { pdf } = await renderer.render(html, { css: await tailwindCss(html) });
+```
+
+Para un tema propio, cambia la entrada a `@import "tailwindcss"; @theme {
+--color-marca: #0f766e; }`. Si ya compilas Tailwind en el build (CLI o
+Vite), basta con leer el `.css` generado y pasarlo en `css`.
+
+**Bootstrap 5.** Lee el CSS del paquete y pásalo tal cual:
+
+```ts
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+
+const bootstrapCss = readFileSync(createRequire(import.meta.url).resolve("bootstrap/dist/css/bootstrap.min.css"), "utf8");
+const renderer = new PdfRenderer({ defaults: { css: bootstrapCss } });
+```
+
+**Breakpoints.** `@media` se evalúa contra el ancho de la página, como Chrome
+al imprimir: A4 vertical mide ~794px, así que aplican `sm:` (640px) y `md:`
+(768px) pero no `lg:` (1024px) ni mayores; en Bootstrap aplican `-sm` y `-md`.
+`print:` y `@media print` aplican; `hover:`, `focus:` y `dark:` no.
+
+**Imágenes.** `data:` URI siempre funcionan; rutas relativas con
+`assets.baseDir`; URLs con `allowRemote` (mejor con `allowedHosts`). Para
+imágenes privadas (S3, base de datos), `resolve` devuelve los bytes:
+
+```ts
+assets: {
+  resolve: async (src) => (src.startsWith("s3://") ? await descargarDeS3(src) : undefined),
+}
+```
+
+**Fuentes propias.** Con `@font-face` en el CSS (TTF/OTF; ver
+[Fuentes incluidas](#fuentes-incluidas)), o para todos los documentos con
+`sidecar.fonts: [{ dir: "/app/fonts" }]` y luego `font-family: "Nombre"`.
+
+**Vista previa como imagen.** `renderPages` devuelve un PNG (o SVG) por
+página:
+
+```ts
+const { pages } = await renderer.renderPages(html, { format: "png", ppi: 96 });
+```
+
+**Script o tarea suelta.** `htmlToPdf(html, opciones)` usa un renderer
+compartido; llama a `disposeDefaultRenderer()` al terminar.
+
+**Cancelar.** `signal` corta la descarga de imágenes y la compilación:
+
+```ts
+await renderer.render(html, { signal: AbortSignal.timeout(20_000) });
+```
+
+### Errores
+
+| Error | Cuándo |
+|---|---|
+| `TranspileError` (`err.name`) | `strict: true` y el HTML usa algo no soportado; `err.warnings` lo lista |
+| `AssetError` | una imagen o fuente no se pudo cargar (host no permitido, 404, tamaño) y `onError` es `throw` |
+| `TypstCompileError` | Typst no pudo compilar (no debería pasar con HTML; repórtalo con `source`) |
+| `TypstTimeoutError` | el documento superó `timeoutMs` |
+
+### Servir el PDF por HTTP
+
+Devuelve los bytes, no base64 (pesa un 33 % más y obliga al cliente a
+decodificar):
+
+```ts
+res.setHeader("Content-Type", "application/pdf");
+res.setHeader("Content-Disposition", 'inline; filename="factura.pdf"');
+res.end(Buffer.from(pdf));
+```
+
+### Lo que no funciona (y qué hacer)
+
+| En el navegador | Aquí |
+|---|---|
+| `<script>`, CDN de Tailwind | compilar el CSS en Node (arriba) |
+| `<link rel="stylesheet">` | leer el archivo y pasarlo en `<style>` o `css` |
+| formularios, video, canvas, iframe | se omiten con warning; usa texto o imágenes |
+| `:hover`, modo oscuro | nunca aplican en papel |
+| WOFF/WOFF2 | convertir a TTF/OTF |
+| `float` | usar flex o grid |
+
+Ver [Soporte de HTML/CSS](#soporte-de-htmlcss) para el detalle.
+
 ## En producción
 
 Una aplicación solo instala `@gjeria/typst-html-pdf`. El motor viene incluido:
