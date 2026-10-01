@@ -2,9 +2,15 @@ name: Tag release
 
 # Creates and pushes the git tags for the current package versions
 # (`@gjeria/<package>@<version>`) without building or publishing. Use it when
-# a Release run published to npm but could not push its tags.
+# a Release run published to npm but could not push its tags. With `ref`,
+# tags the versions found at that commit (an older release).
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit to tag (default the selected branch)
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -14,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
