@@ -81,10 +81,14 @@ export class Cascade {
     }
   }
 
-  /** True when some rule targets `::before`/`::after` of this element. */
+  /**
+   * True when some rule gives `::before`/`::after` of this element a
+   * `content`: without one the pseudo-element is not generated, so rules like
+   * Tailwind's `*, ::before, ::after { … }` reset need no work per element.
+   */
   hasPseudo(el: Element, pseudo: PseudoElement): boolean {
     const target = selectorElement(el);
-    return this.#pseudoRules.some((r) => r.selector.pseudoElement === pseudo && matches(r.selector, target));
+    return this.#pseudoRules.some((r) => r.selector.pseudoElement === pseudo && r.declarations.some((d) => d.property === "content") && matches(r.selector, target));
   }
 
   #candidates(el: Element): CompiledRule[] {
@@ -144,10 +148,14 @@ export class Cascade {
         else custom.set(d.property, pv);
       } else custom.set(d.property, d.value);
     }
-    for (const [p, v] of custom) {
+    // Inherited values were resolved on the parent; only this element's own
+    // custom properties can still contain var().
+    for (const d of ordered) {
+      const v = custom.get(d.property);
+      if (v === undefined || !d.property.startsWith("--") || !v.includes("var(")) continue;
       const resolved = substituteVars(v, custom, []);
-      if (resolved === undefined) custom.delete(p);
-      else custom.set(p, resolved);
+      if (resolved === undefined) custom.delete(d.property);
+      else custom.set(d.property, resolved);
     }
 
     const own = new Map<string, string>();
@@ -156,10 +164,10 @@ export class Cascade {
       const value = substituteVars(d.value, custom, this.warnings);
       // Undefined or empty var(): the declaration is invalid at computed-value time.
       if (value === undefined || value.trim() === "") continue;
-      for (const [p, v] of expandShorthand(d.property, value)) {
+      for (const [p, v] of expanded(d.property, value)) {
         // A value we cannot render is dropped like an invalid declaration, so
         // an earlier fallback (`display: block; display: -webkit-box`) still applies.
-        if (!d.value.includes("var(") && isValidValue(p, v) === false && own.has(p) && isValidValue(p, own.get(p)!)) {
+        if (!d.value.includes("var(") && validValue(p, v) === false && own.has(p) && validValue(p, own.get(p)!)) {
           continue;
         }
         own.set(p, v);
@@ -185,6 +193,26 @@ export class Cascade {
     return { props, own, fontSize, rootFontSize: this.rootFontSize, ...(this.viewport ? { viewport: this.viewport } : {}) };
   }
 }
+
+/**
+ * Memo for pure per-declaration work. Frameworks like Tailwind repeat the same
+ * declarations on many elements (resets, a utility on every table row), so
+ * most lookups hit.
+ */
+export function memo<T>(fn: (property: string, value: string) => T, max = 5000): (property: string, value: string) => T {
+  const cache = new Map<string, T>();
+  return (property, value) => {
+    const key = `${property}\0${value}`;
+    if (cache.has(key)) return cache.get(key) as T;
+    const out = fn(property, value);
+    if (cache.size >= max) cache.clear();
+    cache.set(key, out);
+    return out;
+  };
+}
+
+const expanded = memo((property, value) => expandShorthand(property, value) as readonly (readonly [string, string])[]);
+const validValue = memo(isValidValue);
 
 /** A4 portrait in CSS px: the default media context. */
 export const A4_MEDIA: MediaContext = { width: 793.7, height: 1122.5 };

@@ -1,6 +1,6 @@
 {
   "name": "@gjeria/pdf-templates",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Template-based PDFs: Handlebars + Tailwind (bundled) templates from files or a database, rendered with Typst. CLI with live preview.",
   "keywords": [
     "pdf",

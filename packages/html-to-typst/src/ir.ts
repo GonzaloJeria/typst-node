@@ -158,6 +158,8 @@ export interface TableCell {
   colspan?: number;
   rowspan?: number;
   align?: HAlign;
+  /** `vertical-align` of the cell. */
+  valign?: VAlign;
   fill?: Paint;
   /** The cell's own borders, when they differ from the table-wide stroke. */
   stroke?: Sides<Stroke>;
@@ -270,6 +272,8 @@ export type Block =
       dy: Length;
       /** `left` and `right` both set without a width: the box spans between them. */
       span?: { left: Length; right: Length };
+      /** `top` and `bottom` both set without a height: the box spans between them. */
+      vspan?: { top: Length; bottom: Length };
       /** Offsets are from the page area inside the margins (`position: fixed`). */
       pageArea?: boolean;
       children: Block[];
@@ -305,6 +309,8 @@ export interface PageSetup {
   footer?: MarginBand | null;
   /** Content repeated on every page above the body (`position: fixed`). */
   foreground?: Block[];
+  /** `@page { border; padding }`: a frame around the page area; the body moves inside it. */
+  frame?: { stroke?: Sides<Stroke>; padding?: Sides<Length> };
   /** Overrides for the document's first page (`@page :first`). */
   first?: FirstPage;
 }

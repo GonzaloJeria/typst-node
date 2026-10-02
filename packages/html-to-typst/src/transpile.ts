@@ -3,12 +3,12 @@ import { Cascade } from "./css/cascade.js";
 import { parseStylesheet, type Declaration, type Stylesheet } from "./css/parse.js";
 import { expandBox, parseColor, parseFontSize, parseGradient, parseLength, splitValue, toPt, type LengthContext } from "./css/values.js";
 import type { MediaContext } from "./css/conditions.js";
-import { backgroundImage, Converter, lineHeightOf, type ConvertOptions } from "./convert.js";
+import { backgroundImage, borderStroke, Converter, lineHeightOf, type ConvertOptions } from "./convert.js";
 import { expandShorthand } from "./css/cascade.js";
 import { attr, findAll, findFirst, isText } from "./dom.js";
 import { emitDocument } from "./emit.js";
 import { mapImages } from "./walk.js";
-import type { Block, Document, Inline, Length, MarginBand, MarginBox, PageSetup, Paint, TextStyle } from "./ir.js";
+import type { Block, Document, Inline, Length, MarginBand, MarginBox, PageSetup, Paint, Sides, Stroke, TextStyle } from "./ir.js";
 
 export interface TranspileOptions extends ConvertOptions {
   /** Extra CSS applied after the document's own `<style>` elements. */
@@ -243,6 +243,7 @@ function pageArea(decls: Declaration[], media: MediaContext, rootFontSize: numbe
 function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<string>, first = false): PageSetup | undefined {
   const page: PageSetup = {};
   const background = new Map<string, string>();
+  const frame = new Map<string, string>();
   for (const d of decls) {
     if (first && !/^background/.test(d.property)) {
       warnings.add(`Unsupported @page :first property ignored: ${d.property} (only backgrounds and margin boxes)`);
@@ -272,6 +273,9 @@ function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<strin
       } else warnings.add(`Unsupported @page margin ignored: ${d.value}`);
     } else if (/^background(-color|-image|-size|-position|-repeat)?$/.test(d.property)) {
       for (const [p, v] of expandShorthand(d.property, d.value)) background.set(p, v);
+    } else if (/^(border|padding)(-(top|right|bottom|left))?(-(width|style|color))?$/.test(d.property)) {
+      // A frame around the page area, with padding inside it (CSS paged media).
+      for (const [p, v] of expandShorthand(d.property, d.value)) frame.set(p, v);
     } else if (/^margin-(top|right|bottom|left)$/.test(d.property)) {
       const l = parseLength(d.value, ctx);
       if (l && l.unit !== "%") page.margin = { ...page.margin, [d.property.slice(7)]: l };
@@ -279,6 +283,22 @@ function pageSetup(decls: Declaration[], ctx: LengthContext, warnings: Set<strin
     } else {
       warnings.add(`Unsupported @page property ignored: ${d.property}`);
     }
+  }
+  if (frame.size) {
+    const sidesOf = <T>(f: (side: "top" | "right" | "bottom" | "left") => T | undefined): Sides<T> | undefined => {
+      const out: Sides<T> = {};
+      for (const side of ["top", "right", "bottom", "left"] as const) {
+        const v = f(side);
+        if (v !== undefined) out[side] = v;
+      }
+      return Object.keys(out).length ? out : undefined;
+    };
+    const stroke = sidesOf<Stroke>((side) => borderStroke(frame, side, ctx));
+    const padding = sidesOf<Length>((side) => {
+      const l = parseLength(frame.get(`padding-${side}`) ?? "", ctx);
+      return l && l.unit !== "%" && l.value > 0 ? l : undefined;
+    });
+    if (stroke || padding) page.frame = { ...(stroke ? { stroke } : {}), ...(padding ? { padding } : {}) };
   }
   if (background.size) {
     const fill = paintOf(background);

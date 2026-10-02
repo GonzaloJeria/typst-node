@@ -35,6 +35,17 @@ describe.skipIf(!hasTypst)("PdfRenderer", () => {
     expect(renderer.stats()!.completed).toBeGreaterThan(0);
   });
 
+  it("compiles headers with alignment and a sheet frame, page borders and cell alignment", async () => {
+    const rows = Array.from({ length: 60 }, (_, i) => `<tr><td class="align-top">${i}</td><td>Fila ${i}<br>detalle</td></tr>`).join("");
+    const header = '<div class="flex justify-between"><b>LOGO</b><div class="text-right">Folio 1<br>{{page}}/{{pages}}</div></div><p class="text-left">Cliente</p><div class="fixed inset-[4mm] border border-[#333]"></div>';
+    const r = await renderer.render(
+      { layout: { page: { size: "A4", margin: "15mm", header, border: "1px solid #999", padding: "2mm" } }, sections: [{ html: `<table class="w-full">${rows}</table>` }] },
+      { tailwind: true, strict: true },
+    );
+    expect(Buffer.from(r.pdf.subarray(0, 5)).toString()).toBe("%PDF-");
+    expect(r.warnings).toEqual([]);
+  });
+
   it("drops unresolvable images with onError: skip", async () => {
     const r = await renderer.render('<p>a <img src="missing.png"> b</p>', { assets: { onError: "skip" } });
     expect(r.warnings[0]).toMatch(/missing\.png: file not found/);

@@ -128,12 +128,26 @@ export function isValidValue(property: string, value: string): boolean | undefin
 
 /** Returns a warning for `property: value`, or undefined when it is supported. */
 export function checkDeclaration(property: string, value: string, where: string): string | undefined {
-  if (QUIET.test(property)) return undefined;
-  if (value === "inherit" || value === "initial" || value === "unset") return undefined;
-  const validate = SUPPORTED[property];
-  if (!validate) return `Unsupported CSS ignored: ${displayName(property)}: ${value} (<${where}>)`;
-  if (!validate(value.trim())) return `Unsupported CSS value ignored: ${displayName(property)}: ${value} (<${where}>)`;
+  const problem = declarationProblem(property, value);
+  if (problem === "property") return `Unsupported CSS ignored: ${displayName(property)}: ${value} (<${where}>)`;
+  if (problem === "value") return `Unsupported CSS value ignored: ${displayName(property)}: ${value} (<${where}>)`;
   return undefined;
+}
+
+/** Whether a declaration can be rendered; memoized, since the same ones repeat on many elements. */
+const problems = new Map<string, "property" | "value" | undefined>();
+function declarationProblem(property: string, value: string): "property" | "value" | undefined {
+  const key = `${property}\0${value}`;
+  if (problems.has(key)) return problems.get(key);
+  let out: "property" | "value" | undefined;
+  if (QUIET.test(property) || value === "inherit" || value === "initial" || value === "unset") out = undefined;
+  else {
+    const validate = SUPPORTED[property];
+    out = !validate ? "property" : validate(value.trim()) ? undefined : "value";
+  }
+  if (problems.size >= 5000) problems.clear();
+  problems.set(key, out);
+  return out;
 }
 
 function displayName(property: string): string {

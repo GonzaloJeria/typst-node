@@ -79,7 +79,7 @@ cuando cambia en la base de datos se usa la versión nueva sin reiniciar.
 |---|---|
 | `html` | HTML con `{{variables}}`: un documento completo o un fragmento |
 | `css` | CSS del template (con Tailwind puede usar `@theme`, `@apply`…) |
-| `page` | `{ size, margin, background, header, footer }`, ver abajo |
+| `page` | `{ size, margin, background, border, padding, header, footer }`, ver abajo |
 | `partials` | `{ nombre: "<html>" }` para `{{> nombre}}` |
 | `sample` | datos de ejemplo, para la vista previa y `check` |
 | `tailwind` | `true` (por defecto), `false` para templates de CSS puro, o `"auto"` |
@@ -131,6 +131,13 @@ Los archivos se leen en cada render, así que los cambios se ven sin reiniciar.
   }
 }
 ```
+
+- **Alineación:** el encabezado y el pie ocupan todo el ancho y están
+  centrados por defecto; el HTML decide (`text-left`, `flex justify-between`).
+- **Altura:** si el encabezado no cabe en el margen, el margen crece solo.
+- **Marco en cada hoja:** `"border": "1px solid #333", "padding": "4mm"` en
+  `page` (alrededor del contenido), o `<div class="fixed inset-[4mm] border">`
+  dentro del encabezado (alrededor de la hoja completa).
 
 Lo mismo se puede hacer con CSS: `@page { size: A4; margin: 15mm }`. Sin
 `@page { margin }` ni `page`, la página no tiene margen, como en el
