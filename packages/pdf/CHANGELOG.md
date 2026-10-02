@@ -1,5 +1,44 @@
 # @gjeria/typst-html-pdf
 
+## 0.2.0
+
+### Minor Changes
+
+- b30542f: Fidelidad con Chrome, medida ahora con 13 plantillas (8 de Tailwind, una de 4 páginas): todas sobre 88 % y la mayoría sobre 97 %.
+
+  - Tablas con ancho (`w-full`): las columnas `auto` se reparten el espacio en proporción a su contenido, como el layout automático de CSS. Los bordes colapsados entre filas ocupan su alto.
+  - Los bordes cuentan en el tamaño de las cajas, como en CSS.
+  - Los títulos (`h1`–`h6`) usan el tamaño y el peso del CSS. Antes Typst los agrandaba y ponía en negrita, aunque Tailwind los deje como texto normal.
+  - CSS de Tailwind v4: degradados `in oklab`, `rounded-full` (`calc(infinity * 1px)`), `tabular-nums`, `indent-*`, `line-height` con `calc()` sin unidades, bordes `double` (aproximados con una línea).
+  - `underline`/`line-through` en bloques.
+  - `typst-pdf dev` rechaza otros nombres de host (DNS rebinding) y peticiones que no son JSON, y muestra el HTML sin ejecutar scripts. Google Fonts acepta solo archivos de `fonts.gstatic.com`, de hasta 10 MB.
+
+  **Migración a 0.2.0:** sin `@page { margin }` la página ya no tiene el margen de Typst (~2,5 cm), sino ninguno, como `page.pdf()` de Puppeteer. Para mantener el aspecto anterior agrega `@page { margin: 25mm }`. Los títulos sin tamaño en el CSS ya no se agrandan. El README trae una guía para migrar desde Puppeteer o Playwright.
+
+- 1121281: Más fidelidad con Chrome en plantillas Tailwind:
+
+  - **Cambio de comportamiento:** sin `@page { margin }` la página no tiene margen, como `page.pdf()` de Puppeteer y Playwright. Si el CSS declara cajas de margen (`@top-center`, `@bottom-center`…) o las secciones traen `header`/`footer`, se mantiene un margen por defecto.
+  - `vh`/`vw` se miden contra el área de la página (dentro de los márgenes), como Chrome al imprimir.
+  - `min-height` da a la caja un alto definido cuando el contenido cabe: `justify-content` en columnas flex (`justify-between`, `center`, `end`…) y los hijos `absolute` con `bottom-0` funcionan dentro de ella.
+  - Los hijos `position: absolute` de un contenedor flex/grid no cuentan como ítems, y se ubican contra el borde interior del padding, como en CSS.
+  - Tablas con ancho propio (`w-48`, `width="600"`), filas con altura (`h-10` en `<tr>`) y celdas con padding distinto entre sí.
+  - `white-space: nowrap`, el subrayado de `underline` sobre el `text-decoration: inherit` de Tailwind, y sin warnings por `vertical-align` en imágenes de bloque ni por `text-overflow`.
+
+- dc5006b: Tailwind CSS v4 incluido (el paquete `tailwindcss`, JavaScript puro, sin binarios nativos):
+
+  - `render(html, { tailwind: true })` en `@gjeria/typst-html-pdf` genera el CSS de las clases usadas; los `<style>` y la opción `css` pueden usar `@theme`, `@apply` y `@utility`. También funciona con secciones, header y footer. Se exporta `tailwindCss(html, css)`.
+  - `@gjeria/pdf-templates` usa Tailwind por defecto y ya no necesita instalar `tailwindcss` ni `@tailwindcss/node`; `tailwind: false` para templates de CSS puro.
+  - Avisos para clases desconocidas, breakpoints más anchos que la página (`lg:` en A4) y estados que no existen en papel (`hover:`, `dark:`).
+  - `font-sans`, `font-serif` y `font-mono` usan las fuentes del PDF, sin advertencias por fuentes de escritorio ausentes.
+
+### Patch Changes
+
+- Updated dependencies [b30542f]
+- Updated dependencies [c801883]
+- Updated dependencies [1121281]
+  - @gjeria/html-to-typst@0.2.0
+  - @gjeria/typst-compiler@0.2.0
+
 ## 0.1.3
 
 ### Patch Changes
