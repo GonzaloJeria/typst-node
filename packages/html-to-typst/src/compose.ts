@@ -10,6 +10,10 @@ export interface PageOptions {
   margin?: string;
   /** CSS background: a color or gradient. */
   background?: string;
+  /** CSS `border` around the page area on every page, e.g. `"1px solid #333"` (a frame). */
+  border?: string;
+  /** CSS `padding` between that border and the content, e.g. `"4mm"`. */
+  padding?: string;
   /**
    * HTML repeated at the top/bottom of every page, or `false` for none.
    * `{{page}}` and `{{pages}}` become the current page and the page count.
@@ -83,6 +87,8 @@ function pageCss(page: PageOptions): string {
     // Headers and footers need a margin to live in; Chrome's default leaves none.
     (page.margin ?? (page.header || page.footer ? "20mm 15mm" : undefined)) && `margin: ${page.margin ?? "20mm 15mm"};`,
     page.background && `background: ${page.background};`,
+    page.border && `border: ${page.border};`,
+    page.padding && `padding: ${page.padding};`,
   ].filter(Boolean);
   return decls.length ? `@page { ${decls.join(" ")} }` : "";
 }
@@ -102,7 +108,8 @@ function decorationHtml(page: PageOptions): { html: string; css: string } {
       css.push(`@page { @${edge}-left { content: none } @${edge}-center { content: none } @${edge}-right { content: none } }`);
     } else if (value) {
       const name = `layout-${slot}`;
-      html += `<div style="position: running(${name})">${counters(value)}</div>`;
+      // Centered by default (as before); the header's own text-align or auto margins override it.
+      html += `<div style="position: running(${name}); text-align: center">${counters(value)}</div>`;
       css.push(`@page { @${edge}-center { content: element(${name}) } }`);
     }
   }

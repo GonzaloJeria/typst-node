@@ -151,8 +151,16 @@ const { pdf } = await renderer.render({
 });
 ```
 
-`page` acepta `size`, `margin`, `background`, `header` y `footer` (HTML, o
-`false` para quitarlo); lo que defina una sección reemplaza al del layout.
+`page` acepta `size`, `margin`, `background`, `border` y `padding` (un marco
+alrededor del contenido en cada hoja), y `header` y `footer` (HTML, o `false`
+para quitarlo). Lo que defina una sección reemplaza al del layout.
+
+El encabezado y el pie ocupan todo el ancho y están centrados por defecto; el
+propio HTML decide su alineación (`text-left`, `text-right`, `flex
+justify-between`, `mr-auto`). Si son más altos que el margen, el margen crece
+lo necesario para que no tapen el contenido. Un elemento `fixed` dentro del
+encabezado se ubica sobre la hoja completa, por ejemplo un marco alrededor de
+cada página: `<div class="fixed inset-[4mm] border border-slate-800"></div>`.
 
 Lo mismo se puede hacer en un solo HTML con CSS estándar de páginas con nombre:
 
@@ -624,7 +632,7 @@ bordes (sólidos, `dashed`, `dotted`) y `border-radius` (también distinto por
 esquina, como `rounded-t-lg`), también en elementos
 inline (badges, chips); `text-transform`; `::before`/`::after` con `content`
 (strings con escapes, `attr()`, comillas); `list-style` (marcadores, numeración
-alfabética y romana, `none`); tablas con rowspan/colspan; flex en fila (con `justify-content` y
+alfabética y romana, `none`); tablas con rowspan/colspan y `vertical-align` (`top`, `middle`, `bottom`) en las celdas; flex en fila (con `justify-content` y
 `align-items`) y grid
 explícito; `@page`; saltos de página.
 
@@ -667,12 +675,14 @@ cercano), `position: relative` con desplazamientos (también en línea); los hij
 `absolute` se miden desde el borde interior del padding y no cuentan como
 ítems flex/grid;
 `position: fixed` (se repite en cada página, relativo al área dentro de los márgenes, como al
-imprimir en un navegador; con `left` y `right` ocupa el ancho entre ambos); `<svg>` inline;
+imprimir en un navegador; con `left` y `right` ocupa el ancho entre ambos, y con
+`top` y `bottom` el alto; dentro de un encabezado o pie, relativo a la hoja completa); `<svg>` inline;
 `transform` con `rotate`, `scale` y `translate`; `box-shadow` exterior con
 difuminado aproximado (la caja con sombra no se parte entre páginas).
 
 **Página:** fondo de página desde `@page { background }` o desde el fondo de
-`body`/`html`; encabezado y pie con las cajas de margen `@top-left|center|right`
+`body`/`html`; marco con `@page { border; padding }` (el borde rodea el área
+dentro de los márgenes y el contenido queda dentro del padding); encabezado y pie con las cajas de margen `@top-left|center|right`
 y `@bottom-left|center|right`, con `content` de texto, `counter(page)`,
 `counter(pages)` y `element(nombre)` para mover al margen HTML marcado con
 `position: running(nombre)` (por ejemplo, un logo). `counter(page)` y

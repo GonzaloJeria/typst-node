@@ -67,6 +67,8 @@ export class Converter {
     for (const [prop, value] of s.own) {
       // `vertical-align` only affects inline boxes (Tailwind's preflight sets it on block images).
       if (prop === "vertical-align" && s.props.get("display") === "block") continue;
+      // Table cells align their content vertically: top, middle and bottom.
+      if (prop === "vertical-align" && (where === "td" || where === "th") && CELL_VALIGN[value]) continue;
       const warning = checkDeclaration(prop, value, where);
       if (warning) this.warnings.add(warning);
     }
@@ -152,6 +154,8 @@ export class Converter {
   #trackItem = false;
   /** Padding (in pt) of the nearest positioned ancestor: absolute offsets start at its padding box. */
   #containerPadding: { top: number; right: number; bottom: number; left: number } = { top: 0, right: 0, bottom: 0, left: 0 };
+  /** Depth of `position: running()` ancestors: their fixed children are placed on the whole sheet. */
+  #inRunning = 0;
 
   #block(el: Element, style: ComputedStyle, parent: ComputedStyle): Block[] {
     const tag = el.tagName;
@@ -164,6 +168,8 @@ export class Converter {
     const position = style.own.get("position") ?? "static";
     const positioned = position === "relative" || position === "absolute" || position === "fixed";
     const outerPadding = this.#containerPadding;
+    const isRunning = position.startsWith("running(");
+    if (isRunning) this.#inRunning++;
     if (positioned) {
       const ctx = lengthContext(style);
       const pt = (side: string) => {
@@ -219,6 +225,7 @@ export class Converter {
 
     } finally {
       this.#containerPadding = outerPadding;
+      if (isRunning) this.#inRunning--;
     }
     content = this.#applyBox(el, style, content, positioned, shrink, track);
 
@@ -244,7 +251,9 @@ export class Converter {
       return [];
     }
     if (position === "absolute" || position === "fixed") {
-      const placed = this.#place(style, content, position === "fixed");
+      // A fixed box inside a header or footer is drawn in the margin, outside the
+      // page area: it is placed on the whole sheet (e.g. a frame around every page).
+      const placed = this.#place(style, content, position === "fixed" && !this.#inRunning);
       if (position === "absolute") return [placed];
       this.foreground.push(placed);
       return [];
@@ -301,6 +310,8 @@ export class Converter {
     const placed: Extract<Block, { kind: "place" }> = { kind: "place", x, y, dx: (x === "left" ? left : right) ?? zero, dy: (y === "top" ? top : bottom) ?? zero, children };
     const width = s.props.get("width");
     if (left && right && (!width || width === "auto")) placed.span = { left, right };
+    const height = s.props.get("height");
+    if (top && bottom && (!height || height === "auto")) placed.vspan = { top, bottom };
     if (pageArea) placed.pageArea = true;
     return placed;
   }
@@ -358,6 +369,13 @@ export class Converter {
     const below = parseLength(p.get("margin-bottom") ?? "", ctx);
     if (below && below.unit !== "%") box.below = below;
     if (p.get("break-inside") === "avoid" || p.get("break-inside") === "avoid-page") box.breakable = false;
+    // `top` and `bottom` together give an out-of-flow box its height (`inset-4`), as `left`/`right` give its width.
+    const stretched = /^(absolute|fixed)$/.test(s.own.get("position") ?? "") && s.own.get("top") && s.own.get("bottom");
+    if (stretched && !box.height && (box.fill || box.stroke || box.image)) {
+      // The span between the insets is the whole box, borders and padding included.
+      box.height = { value: 100, unit: "%" };
+      box.borderBox = true;
+    }
     // Auto margins only move a block narrower than its container.
     const full = box.width && typeof box.width === "object" && box.width.unit === "%" && box.width.value >= 100;
     if (p.get("margin-left") === "auto" && box.width && !full) box.align = p.get("margin-right") === "auto" ? "center" : "right";
@@ -876,6 +894,8 @@ export class Converter {
     // <th> is centered unless the author sets text-align (even to `inherit`).
     const align = hAlign(style.props.get("text-align")) ?? hAlign(attr(td, "align")) ?? (isTh && !style.own.has("text-align") ? "center" : undefined);
     if (align && align !== "start" && align !== "left") cell.align = align;
+    const valign = CELL_VALIGN[style.own.get("vertical-align") ?? rowStyle.own.get("vertical-align") ?? attr(td, "valign")?.toLowerCase() ?? ""];
+    if (valign) cell.valign = valign;
     const fill =
       backgroundOf(style.props, opacityOf(style)) ??
       backgroundOf(rowStyle.props, opacityOf(rowStyle)) ??
@@ -939,6 +959,9 @@ export class Converter {
     return [...new Set(out)];
   }
 }
+
+/** `vertical-align` (or the `valign` attribute) of a table cell. */
+const CELL_VALIGN: Record<string, "top" | "horizon" | "bottom"> = { top: "top", middle: "horizon", center: "horizon", bottom: "bottom" };
 
 const FLEX_ALIGN: Record<string, "top" | "horizon" | "bottom"> = {
   "flex-start": "top", start: "top", "self-start": "top",
@@ -1256,7 +1279,7 @@ function sides<T>(get: (side: "top" | "right" | "bottom" | "left") => T | undefi
 
 const BORDER_WIDTHS: Record<string, number> = { thin: 0.75, medium: 2.25, thick: 3.75 };
 
-function borderStroke(
+export function borderStroke(
   props: ReadonlyMap<string, string>,
   side: string,
   ctx: LengthContext,

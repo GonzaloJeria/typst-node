@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToTypst } from "../src/index.js";
+import { composeToTypst, htmlToTypst } from "../src/index.js";
 
 describe("table borders", () => {
   it("draws the table's own border around the table only", () => {
@@ -80,5 +80,59 @@ describe("position: fixed", () => {
     const { source } = htmlToTypst(`<div style="position:relative"><div style="position:absolute; top:0; left:5pt; right:5pt">x</div></div>`);
     expect(source).toContain("place(dx: 5pt, dy: 0pt, top + left, block(width: 100% - 5pt - 5pt");
     expect(source).not.toContain("page.margin");
+  });
+});
+
+describe("headers, frames and cells (reported migrating a marketplace settlement)", () => {
+  const compose = (header: string, css = "") =>
+    composeToTypst({ layout: { page: { margin: "30mm 15mm", header } }, sections: [{ html: "<p>body</p>" }] }, { css }).source;
+
+  it("lets header content align left and right, centered by default", () => {
+    const source = compose('<p style="text-align:left">L</p><p class="r">R</p><p>C</p>', ".r { text-align: right }");
+    // Blocks span the band, so each paragraph aligns across the page width.
+    expect(source).toContain("set block(width: 100%)");
+    expect(source).toContain('above: 12pt, below: 12pt, par("L"))');
+    expect(source).toContain('align(right, par("R"))');
+    expect(source).toContain('align(center, par("C"))');
+  });
+
+  it("places a fixed box inside a header on the whole sheet, sized by its insets", () => {
+    const source = compose('<div style="position:fixed; top:4mm; right:4mm; bottom:4mm; left:4mm; border:1px solid #333"></div>');
+    expect(source).toMatch(/foreground: place\(dx: 4mm, dy: 4mm, top \+ left, block\(width: 100% - 4mm - 4mm, height: 100% - 4mm - 4mm/);
+    expect(source).toMatch(/block\(width: 100%, height: 100%, inset: 0\.75pt, stroke: 0\.75pt/);
+  });
+
+  it("grows a margin when the header does not fit in it", () => {
+    const source = compose("<p>tall</p>");
+    expect(source).toContain("let (fit-top, fit-bottom) = (calc.max(fit-m.top, measure(block(width: fit-w,");
+    expect(source).toContain("set page(margin: (left: fit-m.left, right: fit-m.right, top: fit-top, bottom: fit-bottom)) if fit-top > fit-m.top or fit-bottom > fit-m.bottom");
+  });
+
+  it("draws an @page border and moves the body inside it and the padding", () => {
+    const { source, warnings } = htmlToTypst("<style>@page { margin: 4mm; border: 1px solid #333; padding: 6mm }</style><p>x</p>");
+    expect(warnings).toEqual([]);
+    expect(source).toContain("#set page(margin: 4mm + 0.75pt + 6mm,");
+    expect(source).toContain('background: place(dx: 4mm, dy: 4mm, rect(width: 100% - 4mm - 4mm, height: 100% - 4mm - 4mm, stroke: 0.75pt + rgb("#333333")))');
+  });
+
+  it("takes the page frame from page options too", () => {
+    const { source } = composeToTypst({ layout: { page: { margin: "5mm", border: "2px solid black", padding: "3mm" } }, sections: [{ html: "<p>x</p>" }] });
+    expect(source).toContain("rect(width: 100% - 5mm - 5mm");
+  });
+
+  it("aligns table cells vertically", () => {
+    const { source, warnings } = htmlToTypst(
+      '<table><tr><td style="vertical-align:top">a</td><td style="vertical-align:middle; text-align:right">b</td><td valign="bottom">c</td></tr></table>',
+    );
+    expect(warnings).toEqual([]);
+    expect(source).toContain('table.cell(align: top, par("a"))');
+    expect(source).toContain('table.cell(align: right + horizon, par("b"))');
+    expect(source).toContain('table.cell(align: bottom, par("c"))');
+  });
+
+  it("skips ::before/::after that no rule gives content", () => {
+    const { source, warnings } = htmlToTypst('<style>*, ::before, ::after { box-sizing: border-box; border: 0 solid } p::after { content: "!" }</style><p>a</p><div>b</div>');
+    expect(warnings).toEqual([]);
+    expect(source).toContain('par("a!")');
   });
 });

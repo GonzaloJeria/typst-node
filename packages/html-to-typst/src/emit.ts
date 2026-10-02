@@ -49,7 +49,7 @@ function pageArgs(p: PageSetup): Record<string, string | undefined> {
     flipped: p.flipped ? "true" : undefined,
     width: p.width && length(p.width),
     height: p.height && length(p.height),
-    margin: p.margin && sides(p.margin, length),
+    margin: p.frame ? framedMargins(p) : p.margin && sides(p.margin, length),
     fill: p.fill && paint(p.fill),
     // `fill` cannot vary per page, so a different first-page fill is painted as background.
     background: pageBackground(p, first),
@@ -59,8 +59,35 @@ function pageArgs(p: PageSetup): Record<string, string | undefined> {
   };
 }
 
+const SIDES = ["top", "right", "bottom", "left"] as const;
+
+/** With an `@page` frame, the body sits inside the margin, the border and the padding. */
+function framedMargins(p: PageSetup): string {
+  const out: Record<string, string> = {};
+  for (const side of SIDES) {
+    const parts = [p.margin?.[side], p.frame?.stroke?.[side]?.width, p.frame?.padding?.[side]].filter((l): l is Length => l !== undefined);
+    out[side] = parts.length ? parts.map(length).join(" + ") : "0pt";
+  }
+  return sides<string>(out, (v) => v);
+}
+
+/** The `@page` border, drawn at the margin edge of every page. */
+function pageFrame(p: PageSetup): string | undefined {
+  const s = p.frame?.stroke;
+  if (!s) return undefined;
+  const m = (side: (typeof SIDES)[number]) => (p.margin?.[side] ? length(p.margin[side]!) : "0pt");
+  const rect = call("rect", { width: `100% - ${m("left")} - ${m("right")}`, height: `100% - ${m("top")} - ${m("bottom")}`, stroke: sides(s, stroke) });
+  return `place(dx: ${m("left")}, dy: ${m("top")}, ${rect})`;
+}
+
 /** Page background image and a different first-page fill (`fill` cannot vary per page). */
 function pageBackground(p: PageSetup, first: FirstPage | undefined): string | undefined {
+  const frame = pageFrame(p);
+  const base = pageImageAndFill(p, first);
+  return frame ? (base ? `{ ${base}\n ${frame} }` : frame) : base;
+}
+
+function pageImageAndFill(p: PageSetup, first: FirstPage | undefined): string | undefined {
   const image = p.image && backgroundPicture(p.image, "100%", "100%");
   if (!first || !("fill" in first)) return image;
   const cover = call("rect", { width: "100%", height: "100%", fill: first.fill ? paint(first.fill) : "white" });
@@ -82,8 +109,33 @@ function pageRun(run: PageRun): string {
     body.push(call("set text", { ...textArgs(run.text ?? {}), lang: run.lang === undefined ? undefined : str(run.lang) }));
   }
   if (typeof run.lineHeight === "number") body.push(`show: css-line-height.with(${num(run.lineHeight)})`);
-  body.push("block(height: 0pt)", ...emitBlocks(run.children));
+  const content = ["block(height: 0pt)", ...emitBlocks(run.children)];
+  const fit = run.page && fitMargins(run.page);
+  if (fit) body.push(`${fit}\n${content.map((i) => indent(i)).join("\n")}\n}`);
+  else body.push(...content);
   return `{\n${body.map((i) => indent(i)).join("\n")}\n}`;
+}
+
+/**
+ * A header or footer taller than its margin would overlap the body. Measure
+ * it once its text style is known and grow that margin just enough; one that
+ * fits leaves the page as written.
+ */
+function fitMargins(p: PageSetup): string | undefined {
+  const measured = (b: MarginBand | null | undefined) => (b && (["left", "center", "right"] as const).some((k) => b[k]?.blocks) ? band(b) : undefined);
+  const header = measured(p.header);
+  const footer = measured(p.footer);
+  if (!header && !footer) return undefined;
+  // Typst keeps 30% of the margin between the header (or footer) and the body.
+  const h = (body: string | undefined) => (body ? `measure(block(width: fit-w, ${body})).height / 0.7 + 2mm` : "0pt");
+  return [
+    "context {",
+    `  let fit-m = ${PAGE_MARGINS}`,
+    "  let fit-w = page.width - fit-m.left - fit-m.right",
+    // Prefixed names: they stay in scope for the body below, which may use `top`, `m`…
+    `  let (fit-top, fit-bottom) = (calc.max(fit-m.top, ${h(header)}), calc.max(fit-m.bottom, ${h(footer)}))`,
+    "  set page(margin: (left: fit-m.left, right: fit-m.right, top: fit-top, bottom: fit-bottom)) if fit-top > fit-m.top or fit-bottom > fit-m.bottom",
+  ].join("\n");
 }
 
 /**
@@ -334,9 +386,17 @@ function emitBlockBody(node: Block): string {
       const dx = node.x === "left" ? `${m("left")}${length(node.dx)}` : neg("right", node.dx);
       const dy = node.y === "top" ? `${m("top")}${length(node.dy)}` : neg("bottom", node.dy);
       let body = blocks(node.children);
-      if (node.span) {
-        const margins = node.pageArea ? " - m.left - m.right" : "";
-        body = call("block", { width: `100%${margins} - ${length(node.span.left)} - ${length(node.span.right)}` }, body);
+      if (node.span || node.vspan) {
+        const h = node.pageArea ? " - m.left - m.right" : "";
+        const v = node.pageArea ? " - m.top - m.bottom" : "";
+        body = call(
+          "block",
+          {
+            width: node.span && `100%${h} - ${length(node.span.left)} - ${length(node.span.right)}`,
+            height: node.vspan && `100%${v} - ${length(node.vspan.top)} - ${length(node.vspan.bottom)}`,
+          },
+          body,
+        );
       }
       const placed = call("place", { dx, dy }, `${node.y} + ${node.x}`, body);
       return node.pageArea ? `context {\n  let m = ${PAGE_MARGINS}\n${indent(placed)}\n}` : placed;
@@ -483,7 +543,7 @@ function cell(c: TableCell, strut?: string, name?: string): string {
   const named = {
     colspan: c.colspan && c.colspan > 1 ? num(c.colspan) : undefined,
     rowspan: c.rowspan && c.rowspan > 1 ? num(c.rowspan) : undefined,
-    align: c.align && align(c.align),
+    align: c.align && c.valign ? `${align(c.align)} + ${c.valign}` : c.align ? align(c.align) : c.valign,
     fill: c.fill && paint(c.fill),
     inset: c.inset && sides(c.inset, length),
     // Sides left out fall back to the table's stroke.
@@ -638,7 +698,12 @@ function band(b: MarginBand): string {
   const slots = (["left", "center", "right"] as const).filter((k) => b[k]);
   if (slots.length === 1) {
     const k = slots[0]!;
-    return `align(${k === "center" ? "center" : k} + horizon, ${marginBox(b[k])})`;
+    const box = b[k]!;
+    // A running element spans the whole band, so its own alignment (text-align,
+    // auto margins) applies across the page width instead of within its content.
+    // Margin regions do not stretch blocks the way the page body does, so they are told to.
+    if (box.blocks) return `{\n  set block(width: 100%)\n  align(horizon, ${marginBox(box)})\n}`;
+    return `align(${k === "center" ? "center" : k} + horizon, ${marginBox(box)})`;
   }
   return call(
     "grid",
