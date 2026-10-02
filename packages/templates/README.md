@@ -153,6 +153,11 @@ HTML.
 | `sum` | `{{money (sum items "total")}}` | suma un campo de una lista |
 | `inc` | `{{inc @index}}` | numeración desde 1 |
 
+**Fechas sin hora.** Un día del calendario se muestra siempre en ese día,
+con cualquier zona horaria: `"2026-10-02"` o un `Date` a medianoche UTC (como
+guarda la base de datos un campo de solo fecha) sale `02/10/2026`. Una fecha
+con hora usa `timeZone`.
+
 `{{valor}}` escapa el HTML; `{{{valor}}}` lo inserta sin escapar (solo para HTML
 en el que confías). Formato y zona horaria se configuran con
 `createTemplates({ locale: "es-CL", currency: "CLP", timeZone: "America/Santiago" })`.
@@ -171,7 +176,7 @@ createTemplates({
   locale: "es-CL", currency: "CLP", timeZone: undefined,
   renderer,                         // un PdfRenderer existente, o:
   rendererOptions: {                // opciones del renderer (ver @gjeria/typst-html-pdf)
-    sidecar: { processes: 2, timeoutMs: 15_000 },
+    sidecar: { processes: 2, timeoutMs: 15_000, maxQueue: 50 }, // maxQueue: rechaza el exceso con TypstQueueFullError
     defaults: { assets: { allowRemote: true, allowedHosts: ["cdn.miempresa.com"] } },
   },
 });
@@ -179,11 +184,12 @@ createTemplates({
 
 | Método | Devuelve |
 |---|---|
-| `render(nombreOTemplate, datos?, opciones?)` | `{ pdf, warnings, diagnostics, html, css, source }` |
+| `render(nombreOTemplate, datos?, opciones?)` | `{ pdf, warnings, timings, diagnostics, html, css, source }` |
 | `renderPages(nombreOTemplate, datos?, { format, ppi })` | una imagen PNG/SVG por página (miniaturas) |
 | `html(nombreOTemplate, datos?)` | el HTML y CSS finales, sin generar el PDF |
 | `list()` | nombres de los templates de la fuente |
 | `warmup()` / `dispose()` | arrancar y cerrar los procesos de Typst |
+| `stats()` | carga actual (`processes`, `running`, `queued`, totales), para un health check |
 
 Sin `datos`, se usan los datos de ejemplo del template (`sample` o `data.json`).
 
@@ -206,11 +212,23 @@ pantalla, así que las reglas `@media print` solo se ven en el PDF.
 
 ## Tailwind para PDFs
 
-**Recomendamos Tailwind para los templates.** El CSS que genera es predecible
-(propiedades simples, sin selectores complejos), así que el PDF sale casi
-idéntico a Chrome: la factura de ejemplo llega a 99,8 % de similitud. Además,
-el template completo cabe en un solo HTML, fácil de guardar en la base de
-datos, de revisar y de generar con herramientas de IA.
+**Recomendamos escribir los templates con Tailwind** (viene activado):
+
+- **El PDF sale como en Chrome.** El CSS que genera Tailwind es predecible
+  (una clase, una propiedad, sin selectores complejos), justo lo que el motor
+  reproduce mejor: las plantillas Tailwind de prueba promedian 97 % de
+  similitud con Chrome y la factura llega a 100 %.
+- **Los errores se ven antes de producción.** Una clase mal escrita no da
+  error en el navegador, pero aquí aparece en `warnings`, y
+  `typst-pdf check --strict` lo detiene en CI.
+- **Un template es un solo HTML.** Fácil de guardar en una fila de la base de
+  datos, revisar en un PR, editar sin afectar a otros documentos y generar
+  con IA o copiar desde un diseño de Tailwind UI.
+- **El equipo ya lo conoce.** No hace falta aprender qué CSS soporta el
+  motor: las utilidades de Tailwind están probadas.
+
+`typst-pdf new` crea los templates con Tailwind. Para CSS puro existe
+`--plain` o `tailwind: false`.
 
 Lo que conviene saber:
 
@@ -250,7 +268,15 @@ Lo que conviene saber:
 ## Buenas prácticas
 
 - **Usa Tailwind** y revisa los avisos: una clase mal escrita no genera CSS y
-  no da error en el navegador, pero aquí aparece en `warnings`.
+  no da error en el navegador, pero aquí aparece en `warnings`. Deja el CSS
+  propio para `@theme` (colores y fuentes de tu marca) y `@utility`.
+- **No nombres campos como un helper** (`number`, `date`, `money`, `sum`…):
+  `{{number}}` llama al helper, no al campo, y no muestra nada. La librería
+  lo avisa en `warnings`; usa otro nombre (`folio`) o `{{this.number}}`.
+- **Margen en la página, no en el HTML.** Con `page.margin` (o
+  `@page { margin }`) todas las páginas lo tienen; un `p-10` en el contenedor
+  solo separa el inicio y el final del documento. En tablas largas, agrega
+  `break-inside-avoid` al bloque de totales.
 - **Diseña mirando la vista previa** (`typst-pdf dev`), no el navegador: el PDF
   es lo que verá tu usuario.
 - **Calcula en los datos, presenta en el template.** Totales, impuestos y
@@ -259,3 +285,6 @@ Lo que conviene saber:
 - **Corre `typst-pdf check --strict` en CI** para detectar CSS no soportado
   antes de desplegar.
 - **Usa `allowedHosts`** si los templates cargan imágenes remotas.
+
+Para producción (cola acotada, health check, métricas, caché de imágenes),
+ver [qué pone la librería y qué pone tu servicio](https://github.com/GonzaloJeria/typst-node#qué-pone-la-librería-y-qué-pone-tu-servicio).

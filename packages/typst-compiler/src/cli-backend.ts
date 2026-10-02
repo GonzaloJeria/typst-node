@@ -9,10 +9,12 @@ import {
   TypstBinaryError,
   TypstCompileError,
   TypstDisposedError,
+  TypstQueueFullError,
   TypstTimeoutError,
 } from "./errors.js";
 import { Semaphore } from "./semaphore.js";
 import type {
+  BackendStats,
   CompileRequest,
   CompileResult,
   Diagnostic,
@@ -37,6 +39,11 @@ export interface CliBackendOptions {
   binaryPath?: string;
   /** Max compilations running at once. Default: `availableParallelism()`. */
   maxConcurrency?: number;
+  /**
+   * Max compilations waiting for a free slot; beyond it `compile` rejects at
+   * once with `TypstQueueFullError` instead of queueing. Default: unlimited.
+   */
+  maxQueue?: number;
   /** Default per-compilation timeout. Default: 30 000 ms. */
   timeoutMs?: number;
   /** Fonts added to every compilation. */
@@ -67,11 +74,14 @@ export class CliBackend implements TypstBackend {
   readonly #opts: CliBackendOptions;
   readonly #running = new Set<ChildProcess>();
   #disposed = false;
+  #completed = 0;
+  #failed = 0;
+  #rejected = 0;
 
   constructor(options: CliBackendOptions = {}) {
     this.#opts = options;
     this.#binary = options.binaryPath ?? process.env.TYPST_PATH ?? "typst";
-    this.#semaphore = new Semaphore(options.maxConcurrency ?? availableParallelism());
+    this.#semaphore = new Semaphore(options.maxConcurrency ?? availableParallelism(), options.maxQueue);
   }
 
   /** Checks that the binary runs and meets `minVersion`; returns its version. */
@@ -127,7 +137,13 @@ export class CliBackend implements TypstBackend {
       if (!INPUT_KEY.test(key)) throw new TypeError(`Invalid input key: ${JSON.stringify(key)}`);
     }
 
-    const release = await this.#semaphore.acquire(request.signal);
+    let release: () => void;
+    try {
+      release = await this.#semaphore.acquire(request.signal);
+    } catch (err) {
+      if (err instanceof TypstQueueFullError) this.#rejected++;
+      throw err;
+    }
     try {
       const project = await materializeProject(
         request.files,
@@ -135,13 +151,30 @@ export class CliBackend implements TypstBackend {
         this.#opts.tmpDir,
       );
       try {
-        return await fn(project.root, project.fontDirs);
+        const result = await fn(project.root, project.fontDirs);
+        this.#completed++;
+        return result;
       } finally {
         await project.cleanup();
       }
+    } catch (err) {
+      this.#failed++;
+      throw err;
     } finally {
       release();
     }
+  }
+
+  /** Current load: compilations running and waiting, plus totals. */
+  stats(): BackendStats {
+    return {
+      capacity: this.#semaphore.permits,
+      running: this.#semaphore.inUse,
+      queued: this.#semaphore.pending,
+      completed: this.#completed,
+      failed: this.#failed,
+      rejected: this.#rejected,
+    };
   }
 
   async dispose(): Promise<void> {

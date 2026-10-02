@@ -1,6 +1,6 @@
 {
   "name": "@gjeria/typst-sidecar-darwin-arm64",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "typst-sidecar binary for darwin-arm64 (aarch64-apple-darwin), used by @gjeria/typst-compiler.",
   "author": "Gonzalo Jeria (https://github.com/GonzaloJeria)",
   "license": "MIT",

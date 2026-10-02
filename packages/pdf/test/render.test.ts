@@ -25,6 +25,16 @@ describe.skipIf(!hasTypst)("PdfRenderer", () => {
     expect(r.source).toContain('fill: rgb("#111111")');
   });
 
+  it("reports timings and the backend load", async () => {
+    const r = await renderer.render("<p>x</p>");
+    const t = r.timings;
+    expect(t.totalMs).toBeGreaterThan(0);
+    expect(t.compileMs).toBeGreaterThan(0);
+    expect(t.transpileMs + t.assetsMs + t.compileMs).toBeLessThanOrEqual(t.totalMs + 0.5);
+    expect(renderer.stats()).toMatchObject({ running: 0, queued: 0 });
+    expect(renderer.stats()!.completed).toBeGreaterThan(0);
+  });
+
   it("drops unresolvable images with onError: skip", async () => {
     const r = await renderer.render('<p>a <img src="missing.png"> b</p>', { assets: { onError: "skip" } });
     expect(r.warnings[0]).toMatch(/missing\.png: file not found/);

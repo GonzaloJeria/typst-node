@@ -35,6 +35,17 @@ export class TypstAbortError extends TypstError {
   }
 }
 
+/**
+ * The backend already has `maxQueue` compilations waiting: the request is
+ * refused right away instead of waiting. Answer with 503/429 and retry later.
+ */
+export class TypstQueueFullError extends TypstError {
+  override name = "TypstQueueFullError";
+  constructor(readonly maxQueue: number) {
+    super(`Typst queue is full (${maxQueue} compilations waiting): try again later`);
+  }
+}
+
 export class TypstBinaryError extends TypstError {
   override name = "TypstBinaryError";
 }

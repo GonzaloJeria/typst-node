@@ -1,4 +1,5 @@
 export type {
+  BackendStats,
   CompileRequest,
   CompileResult,
   Diagnostic,
@@ -18,6 +19,7 @@ export {
   TypstCompileError,
   TypstDisposedError,
   TypstError,
+  TypstQueueFullError,
   TypstTimeoutError,
 } from "./errors.js";
 export { parseDiagnostics } from "./diagnostics.js";

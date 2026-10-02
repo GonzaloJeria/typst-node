@@ -61,6 +61,23 @@ export interface PagesResult {
   durationMs: number;
 }
 
+/** A snapshot of a backend's load, for health checks and metrics. */
+export interface BackendStats {
+  /** Compilations that can run at once (processes, or `maxConcurrency`). */
+  capacity: number;
+  /** Compilations running now. */
+  running: number;
+  /** Compilations waiting for a free slot. */
+  queued: number;
+  /** For `SidecarBackend`: processes currently alive (they start on demand or with `warmup()`). */
+  processes?: number;
+  /** Totals since the backend was created. */
+  completed: number;
+  failed: number;
+  /** Requests refused because the queue was full (`maxQueue`). */
+  rejected: number;
+}
+
 export interface TypstBackend {
   /** Compiles to a PDF. */
   compile(request: CompileRequest): Promise<CompileResult>;
@@ -68,4 +85,6 @@ export interface TypstBackend {
   compilePages(request: PagesRequest): Promise<PagesResult>;
   /** Rejects queued work, kills in-flight work and releases resources. */
   dispose(): Promise<void>;
+  /** Current load (optional for custom backends). */
+  stats?(): BackendStats;
 }

@@ -125,7 +125,7 @@ export class PdfTemplates {
       throw new TemplateError(name, err);
     }
     const prepared = await prepareHtml(source, def.baseDir);
-    const warnings = [...prepared.warnings];
+    const warnings = [...helperClashes([def.html, def.page?.header, def.page?.footer, ...Object.values(def.partials ?? {})], this.#options.helpers), ...prepared.warnings];
     let html = prepared.html;
     let css = [...prepared.css, def.css ?? ""].filter(Boolean).join("\n");
 
@@ -184,6 +184,11 @@ export class PdfTemplates {
     return { ...result, ...fontFallbacks(result.diagnostics), warnings: [...t.warnings, ...result.warnings], html: t.html, css: t.css };
   }
 
+  /** The renderer's current load (see `PdfRenderer.stats()`), for health checks and metrics. */
+  stats() {
+    return this.renderer.stats();
+  }
+
   /** Starts the renderer's processes ahead of the first request. */
   warmup(): Promise<void> {
     return this.renderer.warmup();
@@ -215,6 +220,23 @@ export class PdfTemplates {
     }
     return out;
   }
+}
+
+const BUILTIN_HELPERS = new Set(Object.keys(builtinHelpers()));
+
+/**
+ * `{{number}}` with no arguments calls the `number` helper, not a field named
+ * `number`, and renders nothing: no built-in helper works without arguments.
+ */
+function helperClashes(sources: (string | false | undefined)[], own: Record<string, unknown> | undefined): string[] {
+  const names = new Set<string>();
+  for (const text of sources) {
+    if (typeof text !== "string") continue;
+    for (const m of text.matchAll(/\{\{\{?~?\s*([A-Za-z_][\w-]*)\s*~?\}?\}\}/g)) {
+      if (BUILTIN_HELPERS.has(m[1]!) && !own?.[m[1]!]) names.add(m[1]!);
+    }
+  }
+  return [...names].map((n) => `{{${n}}} calls the "${n}" helper, not a field named "${n}", and renders nothing: rename the field or write {{this.${n}}}`);
 }
 
 /**

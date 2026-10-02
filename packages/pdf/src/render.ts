@@ -3,6 +3,7 @@ import {
   CliBackend,
   SidecarBackend,
   resolveSidecarBinary,
+  type BackendStats,
   type CliBackendOptions,
   type SidecarBackendOptions,
   type Diagnostic,
@@ -10,6 +11,7 @@ import {
   type PageFormat,
   type TypstBackend,
 } from "@gjeria/typst-compiler";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { resolveFonts } from "./fonts.js";
 import { resolveAssets, type AssetOptions } from "./assets.js";
@@ -45,6 +47,18 @@ export interface PdfResult {
   diagnostics: Diagnostic[];
   /** Generated Typst source, for debugging. */
   source: string;
+  /** Where the time went, in ms, for logs and metrics. */
+  timings: RenderTimings;
+}
+
+export interface RenderTimings {
+  /** HTML/CSS to Typst, Tailwind included. */
+  transpileMs: number;
+  /** Loading images and fonts (remote downloads included). */
+  assetsMs: number;
+  /** Typst compilation, including the wait for a free process. */
+  compileMs: number;
+  totalMs: number;
 }
 
 export interface PagesResult extends Omit<PdfResult, "pdf"> {
@@ -52,6 +66,8 @@ export interface PagesResult extends Omit<PdfResult, "pdf"> {
 }
 
 interface Prepared {
+  transpileMs: number;
+  assetsMs: number;
   source: string;
   files: Map<string, Uint8Array>;
   /** `@font-face` fonts loaded for this document. */
@@ -92,19 +108,23 @@ export class PdfRenderer {
   }
 
   async render(html: RenderInput, options: RenderOptions = {}): Promise<PdfResult> {
+    const start = performance.now();
     const opts = this.#merge(options);
     const prepared = await prepare(html, opts);
+    const compileStart = performance.now();
     const result = await this.backend.compile({
       source: prepared.source,
       files: prepared.files,
       ...compileExtras(opts, prepared.fonts),
     });
-    return { pdf: result.pdf, warnings: prepared.warnings, diagnostics: result.warnings, source: prepared.source };
+    return { pdf: result.pdf, warnings: prepared.warnings, diagnostics: result.warnings, source: prepared.source, timings: timings(prepared, compileStart, start) };
   }
 
   async renderPages(html: RenderInput, options: RenderOptions & { format?: PageFormat; ppi?: number } = {}): Promise<PagesResult> {
+    const start = performance.now();
     const opts = this.#merge(options);
     const prepared = await prepare(html, opts);
+    const compileStart = performance.now();
     const result = await this.backend.compilePages({
       source: prepared.source,
       files: prepared.files,
@@ -112,13 +132,21 @@ export class PdfRenderer {
       ...(options.ppi ? { ppi: options.ppi } : {}),
       ...compileExtras(opts, prepared.fonts),
     });
-    return { pages: result.pages, warnings: prepared.warnings, diagnostics: result.warnings, source: prepared.source };
+    return { pages: result.pages, warnings: prepared.warnings, diagnostics: result.warnings, source: prepared.source, timings: timings(prepared, compileStart, start) };
   }
 
   /** Starts the backend's processes ahead of the first render, when it supports it. */
   async warmup(): Promise<void> {
     const backend = this.backend as TypstBackend & { warmup?(): Promise<void> };
     await backend.warmup?.();
+  }
+
+  /**
+   * The backend's current load (processes, running, queued, totals), for a
+   * health check or metrics. Undefined for a custom backend without `stats()`.
+   */
+  stats(): BackendStats | undefined {
+    return this.backend.stats?.();
   }
 
   async dispose(): Promise<void> {
@@ -146,21 +174,37 @@ function defaultBackend(options: PdfRendererOptions): TypstBackend {
   return new CliBackend(withFonts({}));
 }
 
+const round = (ms: number) => Math.round(ms * 10) / 10;
+
+function timings(prepared: Prepared, compileStart: number, start: number): RenderTimings {
+  const end = performance.now();
+  return { transpileMs: round(prepared.transpileMs), assetsMs: round(prepared.assetsMs), compileMs: round(end - compileStart), totalMs: round(end - start) };
+}
+
 async function prepare(rawInput: RenderInput, rawOpts: RenderOptions): Promise<Prepared> {
+  const t0 = performance.now();
+  let assetsMs = 0;
   const { input, opts, warnings: tailwindWarnings } = rawOpts.tailwind ? await withTailwind(rawInput, rawOpts) : { input: rawInput, opts: rawOpts, warnings: [] };
   const transpile = (o: RenderOptions) => (typeof input === "string" ? htmlToTypst(input, o) : composeToTypst(input, o));
   let transpiled = transpile(opts);
+  let t = performance.now();
   const fonts = await resolveFonts(transpiled.fontFaces, opts.assets, opts.signal);
+  assetsMs += performance.now() - t;
   // Families named differently in CSS than in the font file: convert again with aliases.
   if (Object.keys(fonts.aliases).length) transpiled = transpile({ ...opts, fontAliases: { ...fonts.aliases, ...opts.fontAliases } });
+  t = performance.now();
   const assets = await resolveAssets(transpiled.assets, opts.assets, opts.signal);
+  assetsMs += performance.now() - t;
   mapImages(transpiled.document, (src) => {
     const mapped = assets.mapping.get(src);
     // Typst resolves "/…" against the project root, i.e. the virtual file map.
     return mapped ? `/${mapped}` : null;
   });
+  const source = emitDocument(transpiled.document);
   return {
-    source: emitDocument(transpiled.document),
+    transpileMs: performance.now() - t0 - assetsMs,
+    assetsMs,
+    source,
     files: assets.files,
     fonts: fonts.fonts,
     warnings: [...tailwindWarnings, ...transpiled.warnings, ...fonts.warnings, ...assets.warnings],

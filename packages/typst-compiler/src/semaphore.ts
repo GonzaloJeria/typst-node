@@ -1,4 +1,4 @@
-import { TypstAbortError, TypstDisposedError } from "./errors.js";
+import { TypstAbortError, TypstDisposedError, TypstQueueFullError } from "./errors.js";
 
 interface Waiter {
   resolve: (release: () => void) => void;
@@ -7,19 +7,27 @@ interface Waiter {
 
 /** FIFO counting semaphore with AbortSignal support. */
 export class Semaphore {
+  readonly permits: number;
   #available: number;
   #queue: Waiter[] = [];
   #closed = false;
 
-  constructor(permits: number) {
+  /** `maxQueue`: waiters allowed before `acquire` rejects with `TypstQueueFullError`. */
+  constructor(permits: number, readonly maxQueue = Infinity) {
     if (!Number.isInteger(permits) || permits < 1) {
       throw new RangeError(`permits must be a positive integer, got ${permits}`);
     }
+    this.permits = permits;
     this.#available = permits;
   }
 
   get pending(): number {
     return this.#queue.length;
+  }
+
+  /** Permits currently held. */
+  get inUse(): number {
+    return this.permits - this.#available;
   }
 
   acquire(signal?: AbortSignal): Promise<() => void> {
@@ -29,6 +37,7 @@ export class Semaphore {
       this.#available--;
       return Promise.resolve(this.#releaser());
     }
+    if (this.#queue.length >= this.maxQueue) return Promise.reject(new TypstQueueFullError(this.maxQueue));
     return new Promise((resolve, reject) => {
       const waiter: Waiter = {
         resolve: (release) => {
