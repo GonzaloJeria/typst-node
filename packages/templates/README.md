@@ -153,6 +153,11 @@ HTML.
 | `sum` | `{{money (sum items "total")}}` | suma un campo de una lista |
 | `inc` | `{{inc @index}}` | numeración desde 1 |
 
+**Fechas sin hora.** Un día del calendario se muestra siempre en ese día,
+con cualquier zona horaria: `"2026-10-02"` o un `Date` a medianoche UTC (como
+guarda la base de datos un campo de solo fecha) sale `02/10/2026`. Una fecha
+con hora usa `timeZone`.
+
 `{{valor}}` escapa el HTML; `{{{valor}}}` lo inserta sin escapar (solo para HTML
 en el que confías). Formato y zona horaria se configuran con
 `createTemplates({ locale: "es-CL", currency: "CLP", timeZone: "America/Santiago" })`.
@@ -171,7 +176,7 @@ createTemplates({
   locale: "es-CL", currency: "CLP", timeZone: undefined,
   renderer,                         // un PdfRenderer existente, o:
   rendererOptions: {                // opciones del renderer (ver @gjeria/typst-html-pdf)
-    sidecar: { processes: 2, timeoutMs: 15_000 },
+    sidecar: { processes: 2, timeoutMs: 15_000, maxQueue: 50 }, // maxQueue: rechaza el exceso con TypstQueueFullError
     defaults: { assets: { allowRemote: true, allowedHosts: ["cdn.miempresa.com"] } },
   },
 });
@@ -179,11 +184,12 @@ createTemplates({
 
 | Método | Devuelve |
 |---|---|
-| `render(nombreOTemplate, datos?, opciones?)` | `{ pdf, warnings, diagnostics, html, css, source }` |
+| `render(nombreOTemplate, datos?, opciones?)` | `{ pdf, warnings, timings, diagnostics, html, css, source }` |
 | `renderPages(nombreOTemplate, datos?, { format, ppi })` | una imagen PNG/SVG por página (miniaturas) |
 | `html(nombreOTemplate, datos?)` | el HTML y CSS finales, sin generar el PDF |
 | `list()` | nombres de los templates de la fuente |
 | `warmup()` / `dispose()` | arrancar y cerrar los procesos de Typst |
+| `stats()` | carga actual (`processes`, `running`, `queued`, totales), para un health check |
 
 Sin `datos`, se usan los datos de ejemplo del template (`sample` o `data.json`).
 
@@ -265,7 +271,8 @@ Lo que conviene saber:
   no da error en el navegador, pero aquí aparece en `warnings`. Deja el CSS
   propio para `@theme` (colores y fuentes de tu marca) y `@utility`.
 - **No nombres campos como un helper** (`number`, `date`, `money`, `sum`…):
-  `{{number}}` llama al helper, no al campo. Usa `folio`, `fecha`, etc.
+  `{{number}}` llama al helper, no al campo, y no muestra nada. La librería
+  lo avisa en `warnings`; usa otro nombre (`folio`) o `{{this.number}}`.
 - **Margen en la página, no en el HTML.** Con `page.margin` (o
   `@page { margin }`) todas las páginas lo tienen; un `p-10` en el contenedor
   solo separa el inicio y el final del documento. En tablas largas, agrega
@@ -278,3 +285,6 @@ Lo que conviene saber:
 - **Corre `typst-pdf check --strict` en CI** para detectar CSS no soportado
   antes de desplegar.
 - **Usa `allowedHosts`** si los templates cargan imágenes remotas.
+
+Para producción (cola acotada, health check, métricas, caché de imágenes),
+ver [qué pone la librería y qué pone tu servicio](https://github.com/GonzaloJeria/typst-node#qué-pone-la-librería-y-qué-pone-tu-servicio).

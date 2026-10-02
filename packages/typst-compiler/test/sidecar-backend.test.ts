@@ -9,6 +9,7 @@ import {
   TypstBinaryError,
   TypstCompileError,
   TypstDisposedError,
+  TypstQueueFullError,
   TypstTimeoutError,
 } from "../src/index.js";
 
@@ -42,6 +43,32 @@ describe.skipIf(!hasSidecar)("SidecarBackend", () => {
     const a = await backend.compile({ source: "= Same" });
     const b = await backend.compile({ source: "= Same" });
     expect(Buffer.from(a.pdf).equals(Buffer.from(b.pdf))).toBe(true);
+  });
+
+  it("reports its load", async () => {
+    await backend.warmup();
+    const before = backend.stats();
+    expect(before).toMatchObject({ capacity: 2, processes: 2, running: 0, queued: 0 });
+    await backend.compile({ source: "= Stats" });
+    await expect(backend.compile({ source: "#let" })).rejects.toBeInstanceOf(TypstCompileError);
+    const after = backend.stats();
+    expect(after.completed).toBe(before.completed + 1);
+    expect(after.failed).toBe(before.failed + 1);
+  });
+
+  it("refuses work beyond maxQueue instead of queueing it", async () => {
+    const small = new SidecarBackend({ binaryPath: binary, processes: 1, maxQueue: 1, timeoutMs: 20_000 });
+    try {
+      const busy = small.compile({ source: SLOW }).catch((e: unknown) => e);
+      const queued = small.compile({ source: "= Waits" }).catch((e: unknown) => e);
+      await expect(small.compile({ source: "= Refused" })).rejects.toBeInstanceOf(TypstQueueFullError);
+      expect(small.stats()).toMatchObject({ running: 1, queued: 1, rejected: 1 });
+      await small.dispose();
+      expect(await queued).toBeInstanceOf(TypstDisposedError);
+      await busy;
+    } finally {
+      await small.dispose();
+    }
   });
 
   it("renders pages to PNG and SVG", async () => {

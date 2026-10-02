@@ -375,6 +375,7 @@ await renderer.render(html, { signal: AbortSignal.timeout(20_000) });
 | `AssetError` | una imagen o fuente no se pudo cargar (host no permitido, 404, tamaño) y `onError` es `throw` |
 | `TypstCompileError` | Typst no pudo compilar (no debería pasar con HTML; repórtalo con `source`) |
 | `TypstTimeoutError` | el documento superó `timeoutMs` |
+| `TypstQueueFullError` | ya hay `maxQueue` documentos esperando; responde 503 y reintenta |
 
 ### Servir el PDF por HTTP
 
@@ -467,6 +468,78 @@ const { pdf, warnings } = await renderer.render({
 }, { signal: AbortSignal.timeout(20_000) });
 
 process.on("SIGTERM", () => renderer.dispose());
+```
+
+### Qué pone la librería y qué pone tu servicio
+
+La librería es un procesador de HTML a PDF: entrega lo que solo ella conoce
+(su cola, sus procesos, cuánto tardó cada etapa) y deja a tu servicio las
+decisiones de infraestructura (logger, métricas, caché, endpoints).
+
+| Necesidad | La librería da | Tu servicio decide |
+|---|---|---|
+| No saturarse | `sidecar.maxQueue` (o `cli.maxQueue`): rechaza al instante con `TypstQueueFullError` | responder 503/429, reintentar o encolar en BullMQ/SQS |
+| Health check | `renderer.stats()`: `{ capacity, processes, running, queued, completed, failed, rejected }` | el endpoint y el umbral |
+| Métricas y logs | `timings` en cada resultado: `{ transpileMs, assetsMs, compileMs, totalMs }` y `warnings` | pino, Prometheus, OpenTelemetry… |
+| Imágenes remotas | `assets.resolve` para entregar los bytes tú mismo | la caché (memoria, Redis, disco) |
+
+**Cola acotada.** Sin límite, un pico de tráfico deja miles de PDFs esperando
+en memoria. Con `maxQueue` el exceso se rechaza de inmediato:
+
+```ts
+import { PdfRenderer, TypstQueueFullError } from "@gjeria/typst-html-pdf";
+
+const renderer = new PdfRenderer({ sidecar: { processes: 2, maxQueue: 50 } });
+
+try {
+  const { pdf } = await renderer.render(html);
+} catch (err) {
+  if (err instanceof TypstQueueFullError) return res.status(503).set("Retry-After", "2").end();
+  throw err;
+}
+```
+
+**Health check** (Kubernetes, Cloud Run):
+
+```ts
+app.get("/health", (_req, res) => {
+  const s = renderer.stats();
+  const ok = s !== undefined && s.queued < 40;   // tu umbral
+  res.status(ok ? 200 : 503).json(s);
+});
+```
+
+**Métricas y logs** con lo que ya devuelve cada render:
+
+```ts
+const { pdf, warnings, timings } = await renderer.render(html);
+logger.info({ template: "factura", ...timings, bytes: pdf.length, warnings: warnings.length }, "pdf generado");
+```
+
+Si `assetsMs` domina, son descargas de imágenes; si `compileMs` crece con
+tráfico, falta capacidad (`processes`) o hay cola (`stats().queued`).
+
+**Caché de imágenes remotas** (logo en un CDN) con `assets.resolve`, que
+recibe la URL y devuelve los bytes, o `undefined` para el comportamiento
+normal:
+
+```ts
+const cache = new Map<string, { bytes: Uint8Array; until: number }>();
+
+const renderer = new PdfRenderer({
+  defaults: {
+    assets: {
+      resolve: async (src) => {
+        if (!src.startsWith("https://cdn.miempresa.com/")) return undefined;
+        const hit = cache.get(src);
+        if (hit && hit.until > Date.now()) return hit.bytes;
+        const bytes = new Uint8Array(await (await fetch(src)).arrayBuffer());
+        cache.set(src, { bytes, until: Date.now() + 10 * 60_000 });
+        return bytes;
+      },
+    },
+  },
+});
 ```
 
 ### Fuentes incluidas

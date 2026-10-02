@@ -7,10 +7,12 @@ import {
   TypstBinaryError,
   TypstCompileError,
   TypstDisposedError,
+  TypstQueueFullError,
   TypstTimeoutError,
 } from "./errors.js";
 import { resolveSidecarBinary } from "./sidecar-binary.js";
 import type {
+  BackendStats,
   CompileRequest,
   CompileResult,
   Diagnostic,
@@ -43,6 +45,11 @@ export interface SidecarBackendOptions {
   creationTimestamp?: number;
   /** Restart a process after this many compilations to bound memory. Default: 500. */
   maxCompilationsPerProcess?: number;
+  /**
+   * Max compilations waiting for a free process; beyond it `compile` rejects
+   * at once with `TypstQueueFullError` instead of queueing. Default: unlimited.
+   */
+  maxQueue?: number;
 }
 
 interface SidecarResponse {
@@ -77,6 +84,9 @@ export class SidecarBackend implements TypstBackend {
   readonly #size: number;
   #nextId = 1;
   #disposed = false;
+  #completed = 0;
+  #failed = 0;
+  #rejected = 0;
 
   constructor(options: SidecarBackendOptions = {}) {
     this.#opts = options;
@@ -113,6 +123,19 @@ export class SidecarBackend implements TypstBackend {
     return { pages: res.output.map(decode), warnings: warningsOf(res), durationMs: res.durationMs };
   }
 
+  /** Current load: processes, compilations running and waiting, plus totals. */
+  stats(): BackendStats {
+    return {
+      capacity: this.#size,
+      running: this.#workers.filter((w) => w.busy).length,
+      queued: this.#queue.length,
+      processes: this.#workers.filter((w) => w.alive).length,
+      completed: this.#completed,
+      failed: this.#failed,
+      rejected: this.#rejected,
+    };
+  }
+
   async dispose(): Promise<void> {
     this.#disposed = true;
     for (const job of this.#queue.splice(0)) job.reject(new TypstDisposedError());
@@ -122,6 +145,11 @@ export class SidecarBackend implements TypstBackend {
   async #submit(request: CompileRequest, output: { format: string; ppi?: number }): Promise<SidecarResponse> {
     if (this.#disposed) throw new TypstDisposedError();
     if (request.signal?.aborted) throw new TypstAbortError();
+    const max = this.#opts.maxQueue;
+    if (max !== undefined && this.#queue.length >= max && !this.#workers.some((w) => w.idle) && this.#workers.length >= this.#size) {
+      this.#rejected++;
+      throw new TypstQueueFullError(max);
+    }
     for (const key of Object.keys(request.inputs ?? {})) {
       if (!INPUT_KEY.test(key)) throw new TypeError(`Invalid input key: ${JSON.stringify(key)}`);
     }
@@ -166,11 +194,16 @@ export class SidecarBackend implements TypstBackend {
       job.reject = settle(reject);
       this.#queue.push(job);
       this.#pump();
+    }).catch((err: unknown) => {
+      this.#failed++;
+      throw err;
     });
     if (!res.ok) {
+      this.#failed++;
       const text = res.diagnostics.map((d) => `${d.severity}: ${d.message}`).join("\n");
       throw new TypstCompileError(res.diagnostics, text, 1);
     }
+    this.#completed++;
     return { ...res, durationMs: performance.now() - started };
   }
 
@@ -238,6 +271,14 @@ class Worker {
 
   get idle(): boolean {
     return !this.#job && !this.#exited && !this.#retiring;
+  }
+
+  get busy(): boolean {
+    return this.#job !== undefined;
+  }
+
+  get alive(): boolean {
+    return !this.#exited;
   }
 
   run(job: Job): void {

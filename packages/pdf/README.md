@@ -81,6 +81,21 @@ process.on("SIGTERM", () => renderer.dispose());
 
 `renderPages()` returns PNG or SVG pages for previews and visual tests.
 
+## In production
+
+The library reports what only it knows; your service decides what to do
+with it:
+
+- **Bounded queue:** `sidecar: { maxQueue: 50 }` refuses the excess at once
+  with `TypstQueueFullError` (answer 503 and retry) instead of piling up
+  documents in memory.
+- **Health and load:** `renderer.stats()` returns `{ capacity, processes,
+  running, queued, completed, failed, rejected }`.
+- **Metrics:** every result has `timings: { transpileMs, assetsMs, compileMs,
+  totalMs }` for your logger or metrics system.
+- **Remote image cache:** `assets.resolve(src)` lets you return the bytes
+  from your own cache.
+
 ## What is supported
 
 Cascade, specificity, inheritance and CSS variables; colors, gradients,

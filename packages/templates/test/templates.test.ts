@@ -21,6 +21,16 @@ describe("helpers", () => {
     expect(call("date", "2026-12-24")).toBe("24-12-2026");
   });
 
+  it("keeps calendar days on their day in any time zone", () => {
+    const tz = { timeZone: "America/Santiago" };
+    // A bare date and a date-only value from a database (UTC midnight).
+    expect(formatDate("2026-10-02", "dd/MM/yyyy", tz)).toBe("02/10/2026");
+    expect(formatDate(new Date("2026-10-02"), "dd/MM/yyyy", tz)).toBe("02/10/2026");
+    expect(formatDate(new Date("2026-10-02"), "d 'de' MMMM", { timeZone: "Asia/Tokyo" })).toBe("2 de octubre");
+    // A real instant still uses the time zone: 01:30 UTC is the evening before in Santiago.
+    expect(formatDate(new Date("2026-10-02T01:30:00Z"), "dd/MM HH:mm", tz)).toBe("01/10 22:30");
+  });
+
   it("does math and logic", () => {
     expect(call("sum", [{ t: 1 }, { t: 2.5 }], "t")).toBe(3.5);
     expect(call("mul", 3, 1000)).toBe(3000);
@@ -109,6 +119,12 @@ describe("templates", () => {
   it("reports missing templates and Handlebars errors with the template name", async () => {
     await expect(templates.render("nope")).rejects.toBeInstanceOf(TemplateNotFoundError);
     await expect(templates.render({ html: "{{#each x}}" })).rejects.toThrow(/Template \(inline\): Parse error/);
+  });
+
+  it("warns when a field is named like a helper", async () => {
+    const t = await templates.html({ html: "<p>N° {{number}} · {{this.date}} · {{money total}}</p>" }, { number: "OC-1", date: "x", total: 1 });
+    expect(t.html).toBe("<p>N°  · x · $1</p>");
+    expect(t.warnings).toEqual([expect.stringContaining('{{number}} calls the "number" helper')]);
   });
 
   it("fails on missing data with strictData", async () => {

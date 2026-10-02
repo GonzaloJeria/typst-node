@@ -21,14 +21,20 @@ function toNumber(v: unknown): number {
   return Number.NaN;
 }
 
-function toDate(v: unknown): Date | undefined {
-  if (v instanceof Date) return v;
-  if (typeof v === "number" || typeof v === "string") {
-    // A bare date (`2026-03-01`) is a calendar day, not UTC midnight.
-    const d = typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00`) : new Date(v);
-    return Number.isNaN(d.getTime()) ? undefined : d;
+/**
+ * A date to format, and whether it is a calendar day (no time of day). A
+ * calendar day is formatted in UTC so no time zone moves it to the day before:
+ * a bare `2026-03-01`, or a `Date` at exactly UTC midnight, which is how
+ * databases store date-only values (`new Date("2026-03-01")`).
+ */
+function toDate(v: unknown): { date: Date; calendar: boolean } | undefined {
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const date = new Date(`${v}T00:00:00Z`);
+    return Number.isNaN(date.getTime()) ? undefined : { date, calendar: true };
   }
-  return undefined;
+  const date = v instanceof Date ? v : typeof v === "number" || typeof v === "string" ? new Date(v) : undefined;
+  if (!date || Number.isNaN(date.getTime())) return undefined;
+  return { date, calendar: date.getTime() % 86_400_000 === 0 };
 }
 
 /**
@@ -37,10 +43,12 @@ function toDate(v: unknown): Date | undefined {
  * `'literal text'`.
  */
 export function formatDate(value: unknown, pattern: string, opts: FormatOptions = {}): string {
-  const d = toDate(value);
-  if (!d) return value == null ? "" : String(value);
+  const parsed = toDate(value);
+  if (!parsed) return value == null ? "" : String(value);
+  const d = parsed.date;
   const locale = opts.locale ?? "es-CL";
-  const tz = opts.timeZone ? { timeZone: opts.timeZone } : {};
+  const zone = parsed.calendar ? "UTC" : opts.timeZone;
+  const tz = zone ? { timeZone: zone } : {};
   if (/^(short|medium|long|full)$/.test(pattern)) {
     return new Intl.DateTimeFormat(locale, { dateStyle: pattern as "short", ...tz }).format(d);
   }
