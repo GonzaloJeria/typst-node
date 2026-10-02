@@ -95,6 +95,10 @@ with it:
   totalMs }` for your logger or metrics system.
 - **Remote image cache:** `assets.resolve(src)` lets you return the bytes
   from your own cache.
+- **Idle memory:** Typst processes stop after `sidecar.idleTimeoutMs` (60 s)
+  without work and restart in ~50 ms on the next document.
+- **Event loop:** `transpileWorkers: 1` converts large documents in a worker
+  thread (~75 MB while alive, stopped when idle). Off by default.
 
 ## What is supported
 

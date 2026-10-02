@@ -39,6 +39,8 @@ export class Converter {
   readonly warnings = new Set<string>();
   readonly #generics: NonNullable<ConvertOptions["genericFamilies"]>;
   readonly #styles = new WeakMap<Element, ComputedStyle>();
+  readonly #shared = new Map<string, ComputedStyle>();
+  readonly #styleIds = new Map<ComputedStyle, number>();
   readonly #aliases = new Map<string, string>();
   /** `position: fixed` content, repeated on every page. */
   readonly foreground: Block[] = [];
@@ -54,11 +56,23 @@ export class Converter {
   style(el: Element, parent: ComputedStyle | undefined): ComputedStyle {
     let s = this.#styles.get(el);
     if (!s) {
-      s = this.cascade.compute(el, parent, attr(el, "style"));
+      // Elements that match the same rules under the same parent style share one computed style.
+      const key = this.cascade.shareKey(el, parent ? this.#styleId(parent) : 0);
+      s = key === undefined ? undefined : this.#shared.get(key);
+      if (!s) {
+        s = this.cascade.compute(el, parent, attr(el, "style"));
+        this.#validate(s, el.tagName);
+        if (key !== undefined) this.#shared.set(key, s);
+      }
       this.#styles.set(el, s);
-      this.#validate(s, el.tagName);
     }
     return s;
+  }
+
+  #styleId(s: ComputedStyle): number {
+    let id = this.#styleIds.get(s);
+    if (id === undefined) this.#styleIds.set(s, (id = this.#styleIds.size + 1));
+    return id;
   }
 
   /** Warns about every declaration on the element that cannot be rendered as written. */

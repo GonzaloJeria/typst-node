@@ -8,6 +8,7 @@ export {
   type PdfResult,
   type RenderInput,
   type RenderOptions,
+  type RendererStats,
   type RenderTimings,
 } from "./render.js";
 export { bundledFontsDir } from "./render.js";

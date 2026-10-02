@@ -590,6 +590,23 @@ Total: **~140 MB** por instancia con un proceso sidecar. Cada proceso extra de
 en Cloud Run con 1 vCPU es 1. El reciclado (`maxCompilationsPerProcess`, 500 por
 defecto) evita que la memoria del sidecar crezca con el tiempo.
 
+**En reposo no consume:** un proceso sin trabajo durante `sidecar.idleTimeoutMs`
+(60 s por defecto) se detiene y devuelve su memoria; el siguiente documento lo
+arranca de nuevo en ~50 ms. Los procesos se crean según la carga, así que un
+servicio que genera un PDF de vez en cuando usa uno solo aunque la máquina
+tenga más CPUs. `idleTimeoutMs: 0` los mantiene siempre encendidos.
+
+**Para gastar menos en un microservicio que también hace otras cosas:**
+
+- `sidecar: { processes: 1 }` o `2`: cada uno atiende un documento a la vez
+  (~10–50 ms), y el resto espera en cola sin memoria extra.
+- Deja `transpileWorkers` en 0 (por defecto). Los workers (~75 MB cada uno,
+  también se apagan sin uso) solo sirven si un documento grande no puede
+  bloquear el event loop: una tabla de 300 filas lo ocupa ~80 ms.
+- Usa `maxQueue` para que un pico no acumule documentos en memoria.
+- Fuentes en una carpeta (`sidecar.fonts: [{ dir }]`), no como bytes por
+  documento: los bytes viajan en cada compilación.
+
 Configuración más barata recomendada:
 
 ```bash

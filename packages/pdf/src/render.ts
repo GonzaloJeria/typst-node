@@ -1,4 +1,4 @@
-import { composeToTypst, htmlToTypst, mapImages, emitDocument, type ComposeInput, type TranspileOptions } from "@gjeria/html-to-typst";
+import { mapImages, emitDocument, type ComposeInput, type TranspileOptions } from "@gjeria/html-to-typst";
 import {
   CliBackend,
   SidecarBackend,
@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { resolveFonts } from "./fonts.js";
 import { resolveAssets, type AssetOptions } from "./assets.js";
 import { tailwindCss } from "./tailwind.js";
+import { TranspilePool } from "./transpile-pool.js";
 
 /**
  * Directory with the fonts shipped in this package (Inter, SIL OFL), which
@@ -49,6 +50,11 @@ export interface PdfResult {
   source: string;
   /** Where the time went, in ms, for logs and metrics. */
   timings: RenderTimings;
+}
+
+export interface RendererStats extends BackendStats {
+  /** Transpile worker threads running now (they stop when idle). */
+  transpileWorkers: number;
 }
 
 export interface RenderTimings {
@@ -93,6 +99,13 @@ export interface PdfRendererOptions {
   defaults?: RenderOptions;
   /** Add the bundled fonts to the backend the renderer creates. Default: true. */
   bundledFonts?: boolean;
+  /**
+   * Worker threads that convert HTML to Typst off the main thread, for
+   * services where a large document must not block the event loop (a 300-row
+   * table blocks it ~80 ms inline). Each costs ~75 MB while alive; they start
+   * on demand and stop after 30 s idle. Default: 0 (convert on the main thread).
+   */
+  transpileWorkers?: number;
 }
 
 /** Long-lived renderer: owns (or borrows) a backend and applies default options. */
@@ -100,17 +113,19 @@ export class PdfRenderer {
   readonly backend: TypstBackend;
   readonly #owned: boolean;
   readonly #defaults: RenderOptions;
+  readonly #pool: TranspilePool;
 
   constructor(options: PdfRendererOptions = {}) {
     this.backend = options.backend ?? defaultBackend(options);
     this.#owned = options.backend === undefined;
     this.#defaults = options.defaults ?? {};
+    this.#pool = new TranspilePool(Math.max(0, Math.floor(options.transpileWorkers ?? 0)));
   }
 
   async render(html: RenderInput, options: RenderOptions = {}): Promise<PdfResult> {
     const start = performance.now();
     const opts = this.#merge(options);
-    const prepared = await prepare(html, opts);
+    const prepared = await prepare(html, opts, this.#pool);
     const compileStart = performance.now();
     const result = await this.backend.compile({
       source: prepared.source,
@@ -123,7 +138,7 @@ export class PdfRenderer {
   async renderPages(html: RenderInput, options: RenderOptions & { format?: PageFormat; ppi?: number } = {}): Promise<PagesResult> {
     const start = performance.now();
     const opts = this.#merge(options);
-    const prepared = await prepare(html, opts);
+    const prepared = await prepare(html, opts, this.#pool);
     const compileStart = performance.now();
     const result = await this.backend.compilePages({
       source: prepared.source,
@@ -145,11 +160,13 @@ export class PdfRenderer {
    * The backend's current load (processes, running, queued, totals), for a
    * health check or metrics. Undefined for a custom backend without `stats()`.
    */
-  stats(): BackendStats | undefined {
-    return this.backend.stats?.();
+  stats(): RendererStats | undefined {
+    const s = this.backend.stats?.();
+    return s && { ...s, transpileWorkers: this.#pool.workers };
   }
 
   async dispose(): Promise<void> {
+    await this.#pool.dispose();
     if (this.#owned) await this.backend.dispose();
   }
 
@@ -181,17 +198,17 @@ function timings(prepared: Prepared, compileStart: number, start: number): Rende
   return { transpileMs: round(prepared.transpileMs), assetsMs: round(prepared.assetsMs), compileMs: round(end - compileStart), totalMs: round(end - start) };
 }
 
-async function prepare(rawInput: RenderInput, rawOpts: RenderOptions): Promise<Prepared> {
+async function prepare(rawInput: RenderInput, rawOpts: RenderOptions, pool: TranspilePool): Promise<Prepared> {
   const t0 = performance.now();
   let assetsMs = 0;
   const { input, opts, warnings: tailwindWarnings } = rawOpts.tailwind ? await withTailwind(rawInput, rawOpts) : { input: rawInput, opts: rawOpts, warnings: [] };
-  const transpile = (o: RenderOptions) => (typeof input === "string" ? htmlToTypst(input, o) : composeToTypst(input, o));
-  let transpiled = transpile(opts);
+  const transpile = (o: RenderOptions) => pool.run(input, o);
+  let transpiled = await transpile(opts);
   let t = performance.now();
   const fonts = await resolveFonts(transpiled.fontFaces, opts.assets, opts.signal);
   assetsMs += performance.now() - t;
   // Families named differently in CSS than in the font file: convert again with aliases.
-  if (Object.keys(fonts.aliases).length) transpiled = transpile({ ...opts, fontAliases: { ...fonts.aliases, ...opts.fontAliases } });
+  if (Object.keys(fonts.aliases).length) transpiled = await transpile({ ...opts, fontAliases: { ...fonts.aliases, ...opts.fontAliases } });
   t = performance.now();
   const assets = await resolveAssets(transpiled.assets, opts.assets, opts.signal);
   assetsMs += performance.now() - t;
