@@ -70,7 +70,12 @@ import { htmlToPdf, disposeDefaultRenderer } from "@gjeria/typst-html-pdf";
 const t = createTemplates();
 const r = await t.render({ html: '<h1 class="text-2xl font-bold text-indigo-600">{{titulo}}</h1><p class="lg:p-4">x</p>' }, { titulo: "Hola" });
 const base = await htmlToPdf('<p class="p-4 bg-zinc-100">x</p>', { tailwind: true });
-console.log(JSON.stringify({ pdf: Buffer.from(r.pdf.slice(0, 5)).toString(), tw: r.css.includes(".text-indigo-600"), warn: r.warnings.length, base: base.pdf.length > 0 }));
+const { PdfRenderer } = await import("@gjeria/typst-html-pdf");
+const threaded = new PdfRenderer({ transpileWorkers: 1 });
+const w = await threaded.render('<p class="p-4">x</p>', { tailwind: true });
+const workers = threaded.stats()?.transpileWorkers;
+await threaded.dispose();
+console.log(JSON.stringify({ pdf: Buffer.from(r.pdf.slice(0, 5)).toString(), tw: r.css.includes(".text-indigo-600"), warn: r.warnings.length, base: base.pdf.length > 0, worker: w.pdf.length > 0 && workers === 1 }));
 await t.dispose();
 await disposeDefaultRenderer();
 `,
@@ -78,6 +83,7 @@ await disposeDefaultRenderer();
 const esm = JSON.parse(run("node", ["esm.mjs"], app));
 check("ESM import, Handlebars, bundled Tailwind, PDF output", esm.pdf === "%PDF-" && esm.tw && esm.base);
 check("Tailwind warnings reach the result", esm.warn === 1);
+check("ESM transpile worker thread", esm.worker);
 
 // CommonJS.
 writeFileSync(
@@ -85,17 +91,19 @@ writeFileSync(
   `const { PdfRenderer } = require("@gjeria/typst-html-pdf");
 const { createTemplates } = require("@gjeria/pdf-templates");
 (async () => {
-  const renderer = new PdfRenderer();
+  const renderer = new PdfRenderer({ transpileWorkers: 1 });
   const r = await renderer.render('<p class="text-red-600">x</p>', { tailwind: true });
+  const worker = renderer.stats()?.transpileWorkers === 1;
   const t = createTemplates({ renderer });
   const h = await t.html({ html: "<p>{{money 1000}}</p>" });
-  console.log(JSON.stringify({ ok: r.pdf.length > 1000, money: h.html, backend: renderer.backend.constructor.name }));
+  console.log(JSON.stringify({ ok: r.pdf.length > 1000, money: h.html, backend: renderer.backend.constructor.name, worker }));
   await renderer.dispose();
 })();
 `,
 );
 const cjs = JSON.parse(run("node", ["cjs.cjs"], app));
 check("CommonJS require", cjs.ok && cjs.money === "<p>$1.000</p>");
+check("CommonJS transpile worker thread", cjs.worker);
 console.log(`  backend: ${cjs.backend}`);
 
 // CLI.

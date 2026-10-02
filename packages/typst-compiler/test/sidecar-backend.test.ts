@@ -56,6 +56,20 @@ describe.skipIf(!hasSidecar)("SidecarBackend", () => {
     expect(after.failed).toBe(before.failed + 1);
   });
 
+  it("stops idle processes and starts them again on demand", async () => {
+    const idle = new SidecarBackend({ binaryPath: binary, processes: 2, idleTimeoutMs: 100 });
+    try {
+      await idle.compile({ source: "= Before" });
+      expect(idle.stats().processes).toBeGreaterThan(0);
+      await new Promise((r) => setTimeout(r, 600));
+      expect(idle.stats().processes).toBe(0);
+      const r = await idle.compile({ source: "= After" });
+      expect(header(r.pdf)).toBe("%PDF-");
+    } finally {
+      await idle.dispose();
+    }
+  });
+
   it("refuses work beyond maxQueue instead of queueing it", async () => {
     const small = new SidecarBackend({ binaryPath: binary, processes: 1, maxQueue: 1, timeoutMs: 20_000 });
     try {

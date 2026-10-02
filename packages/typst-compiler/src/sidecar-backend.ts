@@ -50,6 +50,12 @@ export interface SidecarBackendOptions {
    * at once with `TypstQueueFullError` instead of queueing. Default: unlimited.
    */
   maxQueue?: number;
+  /**
+   * Stop a process after this long without work, to give its memory back
+   * while the service is quiet; the next document starts one again (~50 ms).
+   * `0` keeps processes running. Default: 60 000 ms.
+   */
+  idleTimeoutMs?: number;
 }
 
 interface SidecarResponse {
@@ -226,9 +232,24 @@ export class SidecarBackend implements TypstBackend {
       if (i !== -1) this.#workers.splice(i, 1);
       if (!this.#disposed) this.#pump();
     });
-    worker.onIdle = () => this.#pump();
+    worker.onIdle = () => {
+      this.#pump();
+      if (worker.idle) this.#retireWhenIdle(worker);
+    };
+    void worker.ready.then(() => worker.idle && this.#retireWhenIdle(worker), () => {});
     this.#workers.push(worker);
     return worker;
+  }
+
+  /** Ends a process that stays idle for `idleTimeoutMs`; it exits and is replaced on demand. */
+  #retireWhenIdle(worker: Worker): void {
+    const ms = this.#opts.idleTimeoutMs ?? 60_000;
+    if (ms <= 0) return;
+    clearTimeout(worker.idleTimer);
+    worker.idleTimer = setTimeout(() => {
+      if (worker.idle && !this.#disposed) worker.retire();
+    }, ms);
+    worker.idleTimer.unref();
   }
 }
 
@@ -236,6 +257,7 @@ export class SidecarBackend implements TypstBackend {
 class Worker {
   readonly ready: Promise<void>;
   onIdle: () => void = () => {};
+  idleTimer: NodeJS.Timeout | undefined;
   #child: ChildProcessWithoutNullStreams;
   #job: Job | undefined;
   #waiters: ((line: string) => void)[] = [];
@@ -281,7 +303,14 @@ class Worker {
     return !this.#exited;
   }
 
+  /** Asks the process to exit after its current work (it is not given new work). */
+  retire(): void {
+    this.#retiring = true;
+    this.#child.stdin.end();
+  }
+
   run(job: Job): void {
+    clearTimeout(this.idleTimer);
     this.#job = job;
     const fail = (err: Error) => {
       if (this.#job !== job) return;
@@ -328,6 +357,7 @@ class Worker {
   }
 
   stop(reason: Error): Promise<void> {
+    clearTimeout(this.idleTimer);
     const job = this.#job;
     this.#job = undefined;
     job?.reject(reason);

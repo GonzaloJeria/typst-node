@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -126,5 +126,26 @@ describe("default backend", () => {
     const r = new PdfRenderer({ sidecar: { processes: 1 } });
     expect(r.backend).toBeInstanceOf(SidecarBackend);
     await r.dispose();
+  });
+});
+
+// The worker runs from the built package (dist/transpile-worker.js); from source, conversion stays inline.
+const hasWorker = existsSync(new URL("../dist/transpile-worker.js", import.meta.url));
+
+describe.skipIf(!hasTypst || !hasWorker)("transpile workers", () => {
+  it("converts in worker threads with the same result as inline", async () => {
+    const { PdfRenderer: Built } = (await import(new URL("../dist/index.js", import.meta.url).href)) as typeof import("../src/index.js");
+    const inline = new Built({ cli: {}, transpileWorkers: 0 });
+    const threaded = new Built({ cli: {}, transpileWorkers: 2 });
+    try {
+      const html = '<table class="w-full">' + Array.from({ length: 20 }, (_, i) => `<tr><td class="p-1 align-top">${i}</td></tr>`).join("") + "</table>";
+      const [a, b] = await Promise.all([inline.render(html, { tailwind: true }), threaded.render(html, { tailwind: true })]);
+      expect(b.source).toBe(a.source);
+      expect(threaded.stats()?.transpileWorkers).toBe(1);
+      await expect(threaded.render('<div style="float:left">x</div>', { strict: true })).rejects.toMatchObject({ name: "TranspileError" });
+    } finally {
+      await inline.dispose();
+      await threaded.dispose();
+    }
   });
 });

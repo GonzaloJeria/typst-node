@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { htmlToTypst } from "../src/index.js";
 import { parseDeclarations, parseStylesheet } from "../src/css/parse.js";
 import { matches, parseSelector, type SelectorElement } from "../src/css/selector.js";
 import { parseColor, parseFontSize, parseGradient, parseLength } from "../src/css/values.js";
@@ -146,5 +147,31 @@ describe("selectors", () => {
 
   it("never matches interactive states", () => {
     expect(matches(parseSelector("td:hover")!, td)).toBe(false);
+  });
+});
+
+describe("style sharing between identical elements", () => {
+  const rows = (n: number) => Array.from({ length: n }, (_, i) => `<tr><td class="c">${i}</td></tr>`).join("");
+  // The color of the text run holding `text` (Typst wraps it in text(fill: …, …par("text")…)).
+  const color = (source: string, text: string) => new RegExp(`text\\(fill: rgb\\("#([0-9a-f]{6})"\\), (?:block\\([^\\n]*?)?par\\("${text}"\\)`).exec(source)?.[1];
+
+  it("still tells rows apart by position (odd/even, first/last)", () => {
+    const { source } = htmlToTypst(`<style>tr:nth-child(even) td { color: #ff0000 } tr:last-child td { color: #0000ff }</style><table>${rows(4)}</table>`);
+    expect(color(source, "1")).toBe("ff0000");
+    expect(color(source, "0")).toBeUndefined();
+    expect(color(source, "3")).toBe("0000ff");
+  });
+
+  it("still applies sibling combinators", () => {
+    const { source } = htmlToTypst(`<style>.a + .a { color: #ff0000 }</style><p class="a">x1</p><p class="a">x2</p>`);
+    expect(color(source, "x1")).toBeUndefined();
+    expect(color(source, "x2")).toBe("ff0000");
+  });
+
+  it("still applies :empty and attribute selectors", () => {
+    const { source } = htmlToTypst(`<style>p:empty { height: 9pt } p[data-k="b"] { color: #ff0000 }</style><p data-k="a">ka</p><p data-k="b">kb</p><p></p>`);
+    expect(color(source, "kb")).toBe("ff0000");
+    expect(color(source, "ka")).toBeUndefined();
+    expect(source).toContain("height: 9pt");
   });
 });

@@ -51,14 +51,31 @@ export class Cascade {
   readonly #pseudoRules: CompiledRule[] = [];
   readonly #registered: Stylesheet["properties"];
   readonly warnings: string[] = [];
+  /**
+   * What decides whether two elements get the same style, beyond their own
+   * attributes and their parent's style (see `shareKey`). `false` when a rule
+   * looks at siblings or descendants, so no style is shared.
+   */
+  readonly #sharing: false | { position: boolean; ofType: boolean; empty: boolean };
 
   constructor(sheet: Stylesheet, readonly rootFontSize: number, media: MediaContext = A4_MEDIA, readonly viewport?: { width: number; height: number }) {
     this.#registered = sheet.properties;
     const unlayered = sheet.layers.length;
     let order = 0;
+    let sharing: false | { position: boolean; ofType: boolean; empty: boolean } = { position: false, ofType: false, empty: false };
     for (const rule of sheet.rules) {
       if (rule.media && !rule.media.every((q) => mediaMatches(q, media))) continue;
       for (const text of rule.selectors) {
+        if (sharing) {
+          // Attribute values and nth arguments may contain `+` or `~`: not combinators.
+          const bare = text.replace(/\[[^\]]*\]/g, "").replace(/:nth-[\w-]+\([^)]*\)/g, ":nth");
+          if (/[+~]|:has\(/.test(bare)) sharing = false;
+          else {
+            if (/:(nth|first-|last-|only-)/.test(text)) sharing.position = true;
+            if (/-of-type/.test(text)) sharing.ofType = true;
+            if (/:empty/.test(text)) sharing.empty = true;
+          }
+        }
         const selector = parseSelector(text);
         if (!selector) {
           this.warnings.push(`Unsupported selector ignored: ${text}`);
@@ -79,6 +96,35 @@ export class Cascade {
         }
       }
     }
+    this.#sharing = sharing;
+  }
+
+  /**
+   * A key that is equal for two elements only when they are guaranteed the
+   * same computed style: same tag and attributes (class, id, style…), the same
+   * parent style, and the same position among siblings when a rule depends on
+   * it. Table rows and cells mostly repeat, so their styles are computed once.
+   * Undefined when the stylesheet looks at siblings or descendants (`+`, `~`,
+   * `:has()`), where styles are never shared.
+   */
+  shareKey(el: Element, parentId: number): string | undefined {
+    const sharing = this.#sharing;
+    if (!sharing) return undefined;
+    let key = `${parentId}|${el.tagName}`;
+    for (const a of el.attrs) key += `|${a.name}=${a.value}`;
+    if (sharing.position || sharing.ofType || sharing.empty) {
+      const target = selectorElement(el);
+      if (sharing.position) {
+        const { index, count } = target.position();
+        key += `|#${index}/${count}`;
+      }
+      if (sharing.ofType) {
+        const same = (target.siblings?.() ?? []).filter((x) => x.tagName === el.tagName);
+        key += `|t${same.indexOf(target) + 1}/${same.length}`;
+      }
+      if (sharing.empty) key += target.isEmpty?.() ? "|e" : "|f";
+    }
+    return key;
   }
 
   /**
