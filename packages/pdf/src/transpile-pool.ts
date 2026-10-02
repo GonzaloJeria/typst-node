@@ -16,8 +16,8 @@ interface Pending {
 
 interface Slot {
   worker: Worker;
-  job?: Pending;
-  idleTimer?: NodeJS.Timeout;
+  job?: Pending | undefined;
+  idleTimer?: NodeJS.Timeout | undefined;
 }
 
 /** Workers left idle this long are stopped, so a quiet service holds no extra memory. */
