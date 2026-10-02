@@ -10,6 +10,52 @@ Generación de PDF en Node.js sin navegador: HTML/CSS → Typst → PDF.
 | [`typst-sidecar`](crates/typst-sidecar) | Binario Rust propio sobre los crates oficiales de Typst: compila por JSON sobre stdin/stdout sin reiniciar entre documentos |
 | [`@gjeria/html-to-typst`](packages/html-to-typst) | HTML/CSS → IR → Typst: parse5, cascada CSS propia (selectores, especificidad, herencia, shorthands, `@page`, `@media print`), tablas con rowspan/colspan, flex/grid básicos, saltos de página |
 
+## Por qué Tailwind
+
+**Recomendamos escribir los templates con Tailwind CSS.** Viene incluido (v4,
+sin instalar nada ni configurar), y es la forma más rápida de llegar a un PDF
+correcto:
+
+- **Sale igual que en Chrome.** Tailwind genera CSS simple y predecible: una
+  clase, una propiedad, sin selectores complejos ni `float`. Es exactamente lo
+  que el motor reproduce mejor. Las 8 plantillas Tailwind de prueba (facturas,
+  boletas, reportes, estados de cuenta de varias páginas) promedian **97 %** de
+  similitud con Chrome, y la factura llega a **100 %** (ver
+  [Comparación con Chrome](#comparación-con-chrome)).
+- **Menos errores, y los que hay se avisan.** Con CSS a mano cualquier
+  propiedad puede ser una que no existe en papel. Con Tailwind el conjunto de
+  clases es conocido y probado, y `warnings` señala la clase mal escrita
+  (`txt-red-500`), el breakpoint que no cabe en la página (`lg:` en A4) o el
+  estado que nunca aplica (`hover:`, `dark:`).
+- **Un template es un solo archivo.** HTML con clases, sin hoja de estilos
+  aparte: fácil de guardar en la base de datos, versionar, revisar en un PR y
+  editar sin romper otro documento.
+- **Lo que tu equipo ya sabe.** La mayoría de los developers frontend ya
+  escriben Tailwind. Los diseños de Tailwind UI o generados con IA se
+  pegan casi sin cambios, y el `<script src="https://cdn.tailwindcss.com">` del
+  prototipo se quita solo.
+- **Tu marca en un lugar.** Colores, fuentes y espaciados en `@theme`; los
+  componentes repetidos con `@apply` o `@utility`.
+
+```html
+<div class="p-10 text-sm text-slate-800">
+  <h1 class="text-2xl font-bold text-indigo-600">Factura {{numero}}</h1>
+  <table class="mt-6 w-full">
+    {{#each items}}
+    <tr class="border-b border-slate-200">
+      <td class="py-2">{{descripcion}}</td>
+      <td class="py-2 text-right">{{money total}}</td>
+    </tr>
+    {{/each}}
+  </table>
+</div>
+```
+
+El CSS normal sigue funcionando (Bootstrap y CSS moderno escrito a mano pasan
+del 98 %), así que puedes migrar de a poco. Generar el CSS de Tailwind suma
+unos milisegundos por PDF: un costo menor frente a lo que ahorra en desarrollo
+y depuración.
+
 ## Requisitos
 
 - Node ≥ 20, pnpm 10
@@ -24,17 +70,28 @@ pnpm build       # tsup → ESM + CJS + .d.ts
 
 ## Uso
 
+Con templates (Handlebars + Tailwind, desde archivos o base de datos), usa
+[`@gjeria/pdf-templates`](packages/templates):
+
+```ts
+import { createTemplates } from "@gjeria/pdf-templates";
+
+const templates = createTemplates({ source: async (nombre) => db.plantillas.findOne({ nombre }) });
+const { pdf, warnings } = await templates.render("factura", datos);
+```
+
+Con HTML que ya generas tú, la librería base:
+
 ```ts
 import { PdfRenderer } from "@gjeria/typst-html-pdf";
 
 const renderer = new PdfRenderer({
   defaults: {
+    tailwind: true,                  // Tailwind CSS v4 incluido
     assets: { baseDir: "./templates", allowRemote: true, allowedHosts: ["cdn.example.com"] },
-    fonts: [interBytes],
-    genericFamilies: { "sans-serif": ["Inter"] },
   },
 });
-const { pdf, warnings } = await renderer.render(html);
+const { pdf, warnings } = await renderer.render('<h1 class="text-2xl font-bold text-indigo-600">Hola</h1>');
 await renderer.dispose();
 ```
 
@@ -155,9 +212,11 @@ básicas:
 2. **`await renderer.warmup()`** antes de aceptar tráfico, para que el primer
    PDF no pague el arranque.
 3. **`renderer.dispose()`** al apagar (`SIGTERM`), para cerrar los procesos.
-4. **Prefiere Tailwind** (`tailwind: true`), que da el resultado más fiel a
-   Chrome. El resto del CSS va en el HTML (`<style>`) o en la opción `css`: la
-   librería no ejecuta JavaScript ni descarga `<link rel="stylesheet">`.
+4. **Usa Tailwind** (`tailwind: true`; en `pdf-templates` ya viene activado).
+   Da el resultado más fiel a Chrome y avisa de las clases que no sirven (ver
+   [Por qué Tailwind](#por-qué-tailwind)). Si necesitas CSS propio, va en
+   `@theme`/`@utility`, en un `<style>` o en la opción `css`: la librería no
+   ejecuta JavaScript ni descarga `<link rel="stylesheet">`.
 5. **Revisar `warnings`** mientras desarrollas: lista cada propiedad o valor
    que se descartó o aproximó. En tests, `strict: true` convierte esos
    warnings en error.
@@ -241,7 +300,7 @@ tr, .tarjeta { break-inside: avoid }
 O con secciones (ver [Plantillas y secciones](#plantillas-y-secciones)), que
 además permiten portada sin encabezado y CSS distinto por parte.
 
-**Tailwind CSS v4 (recomendado).** Viene incluido: no hay nada que instalar.
+**Tailwind CSS v4 (la forma recomendada).** Viene incluido: no hay nada que instalar.
 Con `@gjeria/pdf-templates` está activado por defecto; con la librería base
 se activa con `tailwind: true`:
 
@@ -263,7 +322,7 @@ CSS ya está generado. `warnings` avisa de lo que no funciona en papel:
 porque toda la configuración va en CSS. Para usarlo en otro flujo, la librería
 exporta `tailwindCss(html, css)`.
 
-**Bootstrap 5.** Lee el CSS del paquete y pásalo tal cual:
+**Bootstrap 5 o CSS propio.** También funcionan. Si partes de cero, prefiere Tailwind. Para Bootstrap, lee el CSS del paquete y pásalo tal cual:
 
 ```ts
 import { readFileSync } from "node:fs";

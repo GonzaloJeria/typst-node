@@ -20,11 +20,35 @@ the official [`typst`](https://github.com/typst/typst/releases) CLI on the PATH.
 ```ts
 import { htmlToPdf } from "@gjeria/typst-html-pdf";
 
-const { pdf, warnings } = await htmlToPdf(`
-  <style>@page { size: A4; margin: 20mm } h1 { color: #4f46e5 }</style>
-  <h1>Invoice 0042</h1><p>Thank you!</p>
-`);
+const { pdf, warnings } = await htmlToPdf(
+  `<div class="p-10">
+     <h1 class="text-2xl font-bold text-indigo-600">Invoice 0042</h1>
+     <p class="mt-2 text-slate-600">Thank you!</p>
+   </div>`,
+  { tailwind: true },
+);
 ```
+
+## Tailwind first
+
+**Tailwind CSS v4 is bundled and is the recommended way to style documents.**
+Nothing to install or configure: CSS is generated only for the classes the
+HTML uses, and `@theme`, `@apply` and `@utility` work in your `<style>`.
+
+- **Closest to Chrome.** Utility CSS is simple and predictable, which is what
+  the engine reproduces best: the Tailwind test documents average 97 %
+  pixel similarity with Chrome, and the invoice scores 100 %.
+- **Mistakes are reported.** `warnings` lists misspelled classes, breakpoints
+  wider than the page (`lg:` on A4) and states paper never has (`hover:`,
+  `dark:`).
+- **One file per template**, easy to store in a database, review and generate
+  with AI tools. The Tailwind CDN `<script>` from a browser prototype is simply
+  ignored.
+
+Plain CSS and Bootstrap work too. For templates with variables (Handlebars,
+from files or a database) use
+[`@gjeria/pdf-templates`](https://www.npmjs.com/package/@gjeria/pdf-templates),
+which enables Tailwind by default and adds a live preview.
 
 For a server, create one renderer at startup:
 
@@ -34,6 +58,7 @@ import { PdfRenderer } from "@gjeria/typst-html-pdf";
 const renderer = new PdfRenderer({
   sidecar: { processes: 2, timeoutMs: 15_000, fonts: [{ dir: "/app/fonts" }] },
   defaults: {
+    tailwind: true,
     genericFamilies: { "sans-serif": ["Inter"] },
     assets: { baseDir: "/app/templates", allowRemote: true, allowedHosts: ["cdn.example.com"] },
   },
