@@ -626,6 +626,61 @@ gcloud run deploy pdf --source . \
 - Si mandas imágenes grandes o generas PNG, deja 512 MiB: la rasterización
   llega a ~75 MB de pico en el sidecar.
 
+## Typst contra Puppeteer
+
+Benchmark independiente, hecho por un equipo que migró un microservicio de
+liquidaciones de Puppeteer a `@gjeria/typst-html-pdf` 0.2.3.
+
+**Cómo se midió:**
+- Máquina arm64 de 4 núcleos; la misma plantilla HTML + Tailwind en los dos motores.
+- Puppeteer (Chromium 149) en sus mejores condiciones: navegador abierto y
+  reutilizado, y CSS de Tailwind generado una sola vez.
+- Cada corrida genera 40 PDFs. "De a 4" son 4 PDFs pedidos al mismo tiempo.
+- La memoria es el pico de todo el árbol de procesos (Node más el sidecar, o Node más Chrome).
+
+| Escenario | p50 | p95 | PDF/s | Memoria pico | CPU por PDF |
+|---|---|---|---|---|---|
+| 50 filas, de a 1 | **62** contra 214 ms | **91** contra 245 ms | **15,0** contra 4,7 | **313** contra 1.278 MB | **0,13** contra 0,24 s |
+| 50 filas, de a 4 | **192** contra 413 ms | **511** contra 566 ms | **18,7** contra 9,4 | **499** contra 1.732 MB | **0,13** contra 0,18 s |
+| 300 filas, de a 1 | **224** contra 516 ms | **256** contra 558 ms | **4,4** contra 1,9 | **435** contra 1.341 MB | **0,34** contra 0,39 s |
+| 300 filas, de a 4 | **693** contra 851 ms | 1.531 contra **974** ms | **5,5** contra 4,7 | **905** contra 1.858 MB | 0,36 contra **0,26** s |
+
+**Resultados:**
+- **Liquidación típica (50 filas):** 3,5 veces más rápido, de 2 a 3 veces más
+  PDFs por segundo, 4 veces menos memoria y casi la mitad de CPU.
+- **Arranque en frío:** 0,3 a 0,9 s, contra 0,8 a 1,3 s de Chrome.
+- **Peso del PDF:** el de Typst pesa ~25 % menos.
+- **Dónde gana Puppeteer:** el p95 y la CPU con tablas largas pedidas en
+  paralelo. La conversión de HTML corre en el hilo de Node y los pedidos esperan
+  en cola. `transpileWorkers` reduce el bloqueo del event loop a la mitad, pero no
+  aumenta el throughput.
+
+**Evolución de la librería en el mismo benchmark:**
+
+| Escenario | p50: 0.2.1 → 0.2.2 → 0.2.3 | PDF/s: 0.2.1 → 0.2.2 → 0.2.3 |
+|---|---|---|
+| 50 filas, de a 1 | 135 → 80 → 62 ms | 7,1 → 12,0 → 15,0 |
+| 50 filas, de a 4 | 484 → 268 → 192 ms | 7,9 → 13,8 → 18,7 |
+| 300 filas, de a 1 | 594 → 318 → 224 ms | 1,7 → 3,1 → 4,4 |
+| 300 filas, de a 4 | 2.204 → 1.053 → 693 ms | 1,8 → 3,7 → 5,5 |
+
+### Capacidad con 1 vCPU
+
+Medido con la 0.2.3 publicada y el proceso fijado a un núcleo (`taskset -c 0`,
+x64). La plantilla es una liquidación con Tailwind (encabezado, tabla y
+totales), con `processes: 1`, y se generaron 60 PDFs por corrida.
+
+| Documento | De a 1 | De a 4 | Memoria pico |
+|---|---|---|---|
+| 50 filas (1–2 páginas) | 24 PDF/s, p50 35 ms | 26 PDF/s, p50 130 ms | ~200 MB |
+| 300 filas (~8 páginas) | 6 PDF/s, p50 161 ms | 6 PDF/s, p50 649 ms | ~400 MB |
+
+Con un solo núcleo, pedir más PDFs a la vez no aumenta el throughput: solo los
+pone en cola. Un vCPU de Cloud Run suele ser más lento que este núcleo. Según
+la CPU por PDF del benchmark en arm64, calcula entre **8 y 25 PDF/s** para
+documentos de 50 filas y entre **3 y 6 PDF/s** para 300 filas. Mide en tu propia
+instancia antes de dimensionar.
+
 ## Publicar en npm
 
 Las versiones y los CHANGELOG salen de `.changeset/` (`pnpm changeset` para
