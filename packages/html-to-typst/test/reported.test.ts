@@ -135,4 +135,27 @@ describe("headers, frames and cells (reported migrating a marketplace settlement
     expect(warnings).toEqual([]);
     expect(source).toContain('par("a!")');
   });
+
+  it("keeps a break-before: avoid block with the table's last rows", () => {
+    const rows = Array.from({ length: 6 }, (_, i) => `<tr><td>r${i}</td></tr>`).join("");
+    const { source, warnings } = htmlToTypst(
+      `<table style="border:1px solid black; widows: 3"><thead><tr><th>H</th></tr></thead><tbody>${rows}</tbody><tbody><tr><td>total</td></tr></tbody></table><div style="break-before: avoid; break-inside: avoid">firma</div>`,
+    );
+    expect(warnings).toEqual([]);
+    // Both layouts are emitted; the previous pass picks one.
+    expect(source).toContain("let split = if g != none { a != g } else if c != none { t != c } else { false }");
+    // Split: 6 - 3 widows - 1 last <tbody> row = 3 rows stay, the rest stick to the block.
+    expect(source).toContain("block(breakable: false, sticky: true, [#metadata(none) <keep-0-g>]");
+    expect(source).toContain('[#metadata(none) <keep-0-a>] + par("r2")');
+    expect(source).toContain('[#metadata(none) <keep-0-t>] + par("r3")');
+    // Unbreakable block: its page is where it ends.
+    expect(source).toMatch(/par\("firma"\)\)\s*\[#metadata\(none\) <keep-0-c>\]/);
+  });
+
+  it("leaves a break-before: avoid block alone when the table is too short to split", () => {
+    const { source } = htmlToTypst(`<table><tr><td>a</td></tr><tr><td>b</td></tr></table><p style="break-before: avoid">x</p>`);
+    expect(source).not.toContain("keep-0");
+    expect(source).toContain('par("x")');
+  });
 });
+

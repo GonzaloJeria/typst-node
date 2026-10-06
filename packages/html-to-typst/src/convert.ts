@@ -277,6 +277,7 @@ export class Converter {
     const after = style.props.get("break-after");
     if (before === "page" || before === "left" || before === "right") content.unshift({ kind: "pagebreak", weak: true });
     if (after === "page" || after === "left" || after === "right") content.push({ kind: "pagebreak", weak: true });
+    if ((before === "avoid" || before === "avoid-page") && content.length) return [{ kind: "keep", children: content }];
     return content;
   }
 
@@ -756,10 +757,14 @@ export class Converter {
   #table(el: Element, style: ComputedStyle): Block {
     const sections: Record<"header" | "body" | "footer", Element[]> = { header: [], body: [], footer: [] };
     let colEls: Element[] = [];
+    const groups: number[] = [];
     for (const child of el.childNodes) {
       if (!isElement(child)) continue;
       if (child.tagName === "thead") sections.header.push(...rowsOf(child));
-      else if (child.tagName === "tbody") sections.body.push(...rowsOf(child));
+      else if (child.tagName === "tbody") {
+        sections.body.push(...rowsOf(child));
+        groups.push(rowsOf(child).length);
+      }
       else if (child.tagName === "tfoot") sections.footer.push(...rowsOf(child));
       else if (child.tagName === "tr") sections.body.push(child);
       else if (child.tagName === "colgroup") colEls.push(...child.childNodes.filter(isElement).filter((c) => c.tagName === "col"));
@@ -831,6 +836,10 @@ export class Converter {
     if (tableWidth && tableWidth !== "auto" && columns.includes("auto")) block.fillAuto = true;
     if (header.length) block.header = header;
     if (footer.length) block.footer = footer;
+    const widows = Number(style.props.get("widows"));
+    if (widows > 0) block.widows = widows;
+    // Header rows taken from the first <tbody> don't change its last group.
+    if (groups.length > 1 && groups.at(-1)! > 0) block.lastGroup = groups.at(-1)!;
 
     // Cell borders: one table-wide stroke when every cell has the same
     // borders, else each cell keeps its own. The table's own border is drawn

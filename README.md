@@ -295,6 +295,25 @@ secciones) reservan un margen por defecto. Con CSS estándar:
 tr, .tarjeta { break-inside: avoid }
 ```
 
+**Cierre que nunca queda solo en una página.** Un bloque con
+`break-before: avoid` justo después de una tabla (totales, firma) no empieza
+una página por su cuenta: si no cabe tras la tabla, se lleva las últimas filas
+con él, y la tabla repite su encabezado en la página nueva. Es lo que hacen
+los motores de impresión profesionales (Prince, Antenna House); Chrome deja el
+bloque solo.
+
+```html
+<table>
+  <thead>…</thead>
+  <tbody>…detalle…</tbody>
+  <tbody>…subtotales…</tbody>   <!-- el último <tbody> viaja completo -->
+</table>
+<div class="break-before-avoid break-inside-avoid">…total y firma…</div>
+```
+
+Viajan las 2 últimas filas del detalle (cámbialo con `widows: 3` en la tabla)
+más el último `<tbody>` si hay más de uno.
+
 **Encabezado con logo en cada página.** Con `position: running()`:
 
 ```html

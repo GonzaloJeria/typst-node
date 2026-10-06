@@ -284,6 +284,10 @@ Lo que conviene saber:
   `@page { margin }`) todas las páginas lo tienen; un `p-10` en el contenedor
   solo separa el inicio y el final del documento. En tablas largas, agrega
   `break-inside-avoid` al bloque de totales.
+- **Que el cierre no quede solo en una página.** Pon los subtotales en un
+  segundo `<tbody>` y agrega `break-before-avoid` al bloque de total y firma
+  que sigue a la tabla: si no cabe, se lleva las últimas filas del detalle a
+  la página siguiente en vez de quedar solo.
 - **Diseña mirando la vista previa** (`typst-pdf dev`), no el navegador: el PDF
   es lo que verá tu usuario.
 - **Calcula en los datos, presenta en el template.** Totales, impuestos y

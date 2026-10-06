@@ -32,6 +32,7 @@ export function emitDocument(doc: Document): string {
   // Page runs (composed sections) bring their own, after their `set page`: content before
   // a `set page` would start a new page and leave the first one blank.
   const strut = doc.children[0]?.kind === "page-run" ? [] : ["block(height: 0pt)"];
+  keepIds = 0;
   lines.push(`#${seq([...strut, ...emitBlocks(doc.children)])}`);
   return lines.join("\n") + "\n";
 }
@@ -245,7 +246,7 @@ function gridCell(nodes: Block[]): string {
   const margin = (b: Block | undefined, side: "above" | "below"): boolean => {
     if (!b) return false;
     if (b.kind === "box") return !!b.style[side] || margin(side === "above" ? b.children[0] : b.children.at(-1), side);
-    if (b.kind === "pad" || b.kind === "styled-block") return margin(side === "above" ? b.children[0] : b.children.at(-1), side);
+    if (b.kind === "pad" || b.kind === "styled-block" || b.kind === "keep") return margin(side === "above" ? b.children[0] : b.children.at(-1), side);
     return "margins" in b && !!b.margins?.[side];
   };
   const strut = "block(height: 0pt)";
@@ -268,6 +269,12 @@ function emitBlocks(nodes: Block[]): string[] {
   const out: string[] = [];
   let prev: Block | undefined;
   for (let node of nodes) {
+    const kept = node.kind === "keep" && prev && out.length ? keepWithTable(prev, node.children) : undefined;
+    if (kept) {
+      out[out.length - 1] = kept;
+      prev = node;
+      continue;
+    }
     const above = edgeMargin(node, "above");
     if (above && above.value < 0) {
       node = structuredClone(node);
@@ -292,7 +299,7 @@ type Edge = "above" | "below";
 function edgeMargin(b: Block, side: Edge): Length | undefined {
   if (b.kind === "box") return b.style[side] ?? (b.style.inset || b.style.stroke ? undefined : edgeOfChildren(b.children, side));
   if ("margins" in b && b.margins?.[side]) return b.margins[side];
-  if (b.kind === "styled-block" || b.kind === "transform") return edgeOfChildren(b.children, side);
+  if (b.kind === "styled-block" || b.kind === "transform" || b.kind === "keep") return edgeOfChildren(b.children, side);
   return undefined;
 }
 
@@ -308,7 +315,7 @@ function setEdgeMargin(b: Block, side: Edge, value: Length | undefined): void {
   } else if ("margins" in b && b.margins?.[side]) {
     if (value) b.margins[side] = value;
     else delete b.margins[side];
-  } else if (b.kind === "box" || b.kind === "styled-block" || b.kind === "transform") {
+  } else if (b.kind === "box" || b.kind === "styled-block" || b.kind === "transform" || b.kind === "keep") {
     const child = side === "above" ? b.children[0] : b.children.at(-1);
     if (child) setEdgeMargin(child, side, value);
   }
@@ -407,28 +414,13 @@ function emitBlockBody(node: Block): string {
       return call("pad", { left: node.left && length(node.left), right: node.right && length(node.right) }, blocks(node.children));
     case "styled-block":
       return call("text", textArgs(node.style), blocks(node.children));
+    case "keep":
+      // Not after a table: nothing to carry along.
+      return blocks(node.children);
     case "table": {
+      if (shared?.tables.has(node)) return tableCall(node, shared.names, shared.columns);
       const names = node.fillAuto ? cellNames(node) : undefined;
-      const parts: string[] = [];
-      if (node.header?.length) parts.push(call("table.header", { repeat: "true" }, ...rows(node.header, node.inset, names?.names)));
-      parts.push(...rows(node.body, node.inset, names?.names));
-      if (node.footer?.length) parts.push(call("table.footer", {}, ...rows(node.footer, node.inset, names?.names)));
-      const table = call(
-        "table",
-        {
-          columns: names ? "cols" : tuple(node.columns),
-          stroke:
-            node.stroke === undefined
-              ? undefined
-              : node.stroke === null
-                ? "none"
-                : "width" in node.stroke
-                  ? stroke(node.stroke as Stroke)
-                  : tableSides(node.stroke),
-          inset: node.inset && ("unit" in node.inset ? length(node.inset) : sides(node.inset, length)),
-        },
-        ...parts,
-      );
+      const table = tableCall(node, names?.names);
       return names ? autoTableLayout(node, names, table) : table;
     }
     case "grid":
@@ -475,6 +467,121 @@ function tuple(sizes: Size[]): string {
 }
 
 /** Variable names for the cells of an auto-layout table, and the cells of each column. */
+type TableBlock = Extract<Block, { kind: "table" }>;
+
+function tableCall(node: TableBlock, names?: Map<TableCell, string>, columns?: string): string {
+  const parts: string[] = [];
+  if (node.header?.length) parts.push(call("table.header", { repeat: "true" }, ...rows(node.header, node.inset, names)));
+  parts.push(...rows(node.body, node.inset, names));
+  if (node.footer?.length) parts.push(call("table.footer", {}, ...rows(node.footer, node.inset, names)));
+  return call(
+    "table",
+    {
+      columns: columns ?? (names ? "cols" : tuple(node.columns)),
+      stroke:
+        node.stroke === undefined
+          ? undefined
+          : node.stroke === null
+            ? "none"
+            : "width" in node.stroke
+              ? stroke(node.stroke as Stroke)
+              : tableSides(node.stroke),
+      inset: node.inset && ("unit" in node.inset ? length(node.inset) : sides(node.inset, length)),
+    },
+    ...parts,
+  );
+}
+
+// ── Keeping a block with the end of a table (`break-before: avoid`) ─────────
+
+let keepIds = 0;
+/** Labels put in front of a cell's content, to locate its row. */
+const cellLabels = new Map<TableCell, string>();
+/** Tables split in two that share their columns (`cols`) and cell names. */
+let shared: { tables: Set<TableBlock>; names?: Map<TableCell, string>; columns: string } | undefined;
+
+/**
+ * A block with `break-before: avoid` after a table never starts a page on its
+ * own: when it does not fit after the table, it takes the table's last rows
+ * along (CSS `widows`, 2 by default, plus a last `<tbody>` kept whole), as
+ * print engines do. The table is then split in two: the rows that stay, and
+ * the carried rows, which repeat the header and stick to the block.
+ *
+ * Which layout applies is decided from the previous layout pass: the whole
+ * table while the block lands on the page of its last rows, the split one
+ * while the carried rows don't fit before the block. Both checks agree (the
+ * split layout is never shorter), so the document converges.
+ */
+function keepWithTable(prev: Block, closing: Block[]): string | undefined {
+  const inner = prev.kind === "box" && prev.children.length === 1 ? prev.children[0]! : prev;
+  if (inner.kind !== "table") return undefined;
+  const table = inner;
+  const cut = table.body.length - (table.lastGroup ?? 0) - (table.widows ?? 2);
+  if (cut < 1 || spansCut(table.body, cut)) return undefined;
+  const id = `keep-${keepIds++}`;
+  const label = (cell: TableCell | undefined, name: string) => cell && cellLabels.set(cell, `${id}-${name}`);
+  label(table.body[cut - 1]!.cells[0], "a");
+  label(table.body[cut]!.cells[0], "t");
+
+  const below = edgeMargin(prev, "below");
+  const head: TableBlock = { ...table, body: table.body.slice(0, cut) };
+  const tail: TableBlock = { ...table, body: table.body.slice(cut) };
+  // The rows that stay keep the table's top margin; the carried ones get its bottom margin outside.
+  const wrap = (t: TableBlock, drop: Edge[]): Block => {
+    if (prev.kind !== "box") {
+      const margins = { ...t.margins };
+      for (const side of drop) delete margins[side];
+      return { ...t, margins };
+    }
+    const style = { ...prev.style };
+    for (const side of drop) delete style[side];
+    return { ...prev, style, children: [t] };
+  };
+  const carried = (body: string) =>
+    call("block", { breakable: "false", sticky: "true", below: below && length(below) }, `[#metadata(none) <${id}-g>] + ${body}`);
+
+  // The closing block's page: its end when it cannot break, else its start.
+  const unbreakable = closing.length === 1 && closing[0]!.kind === "box" && closing[0]!.style.breakable === false;
+  const marker = `[#metadata(none) <${id}-c>]`;
+  const rest = emitBlocks(closing);
+  const whole = seq([emitBlock(prev), ...(unbreakable ? [...rest, marker] : [marker, ...rest])]);
+
+  // The two tables need the same columns. Content-sized ones are measured once, over all the rows.
+  const names = table.columns.includes("auto") ? cellNames(table) : undefined;
+  shared = { tables: new Set([head, tail]), ...(names ? { names: names.names } : {}), columns: names ? "cols" : tuple(table.columns) };
+  let split: string;
+  try {
+    const parts = [emitBlock(wrap(head, ["below"])), carried(emitBlock(wrap(tail, ["above", "below"]))), ...rest];
+    split = seq(parts);
+    if (names) {
+      // Spacing set inside a `layout` does not reach the surrounding flow.
+      const above = edgeMargin(prev, "above");
+      split = call("block", { above: above && length(above) }, autoTableLayout(table, names, split, !!table.fillAuto));
+    }
+  } finally {
+    shared = undefined;
+    cellLabels.clear();
+  }
+
+  return [
+    "context {",
+    "  let page-of(l) = { let found = query(l); if found.len() > 0 { found.first().location().page() } }",
+    `  let (a, g, t, c) = (page-of(<${id}-a>), page-of(<${id}-g>), page-of(<${id}-t>), page-of(<${id}-c>))`,
+    "  let split = if g != none { a != g } else if c != none { t != c } else { false }",
+    "  if split {",
+    indent(indent(split)),
+    "  } else {",
+    indent(indent(whole)),
+    "  }",
+    "}",
+  ].join("\n");
+}
+
+/** Whether a rowspan crosses from the rows before `cut` into the rows after it. */
+function spansCut(body: TableRow[], cut: number): boolean {
+  return body.slice(0, cut).some((row, r) => row.cells.some((c) => r + (c.rowspan ?? 1) > cut));
+}
+
 function cellNames(node: Extract<Block, { kind: "table" }>): { names: Map<TableCell, string>; columns: string[][] } {
   const names = new Map<TableCell, string>();
   const columns: string[][] = node.columns.map(() => []);
@@ -505,7 +612,7 @@ function cellNames(node: Extract<Block, { kind: "table" }>): { names: Map<TableC
  * proportional to it. When the content does not fit, Typst's own `auto`
  * sizing takes over (it wraps the widest columns first, as browsers do).
  */
-function autoTableLayout(node: Extract<Block, { kind: "table" }>, cells: { names: Map<TableCell, string>; columns: string[][] }, table: string): string {
+function autoTableLayout(node: Extract<Block, { kind: "table" }>, cells: { names: Map<TableCell, string>; columns: string[][] }, table: string, fill = true): string {
   const all = [...(node.header ?? []), ...node.body, ...(node.footer ?? [])].flatMap((r) => r.cells);
   const inset = node.inset ?? { value: 0, unit: "pt" as const };
   const pad = "unit" in inset ? `2 * ${length(inset)}` : [inset.left, inset.right].map((l) => (l ? length(l) : "0pt")).join(" + ");
@@ -519,7 +626,7 @@ function autoTableLayout(node: Extract<Block, { kind: "table" }>, cells: { names
     }),
     `let need = ${autos.map((i) => `m${i}`).join(" + ")}`,
     `let free = size.width - need${fixed.length ? ` - (${fixed.join(" + ")})` : ""}`,
-    `let cols = if free >= 0pt and need > 0pt { (${node.columns.map((c, i) => (c === "auto" ? `m${i} + free * (m${i} / need)` : size(c))).join(", ")},) } else { ${tuple(node.columns)} }`,
+    `let cols = if free >= 0pt and need > 0pt { (${node.columns.map((c, i) => (c !== "auto" ? size(c) : fill ? `m${i} + free * (m${i} / need)` : `m${i}`)).join(", ")},) } else { ${tuple(node.columns)} }`,
     table,
   ];
   return `layout(size => {
@@ -549,7 +656,8 @@ function cell(c: TableCell, strut?: string, name?: string): string {
     // Sides left out fall back to the table's stroke.
     stroke: c.stroke && `(${(["top", "right", "bottom", "left"] as const).filter((k) => c.stroke![k]).map((k) => `${k}: ${stroke(c.stroke![k]!)}`).join(", ")})`,
   };
-  const content = name ?? blocks(c.children);
+  const label = cellLabels.get(c);
+  const content = label ? `[#metadata(none) <${label}>] + ${name ?? blocks(c.children)}` : (name ?? blocks(c.children));
   const body = strut ? call("grid", { columns: "(0pt, 1fr)" }, strut, content) : content;
   return Object.values(named).some((v) => v !== undefined) ? call("table.cell", named, body) : body;
 }
