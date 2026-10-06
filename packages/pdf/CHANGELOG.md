@@ -1,4 +1,33 @@
-# @gjeria/typst-html-pdf
+# @typdf/pdf
+
+## 0.3.0
+
+### Minor Changes
+
+- New name: the packages move to the `@typdf` npm organization.
+
+  - `@gjeria/typst-html-pdf`, `@gjeria/pdf-templates` and `@gjeria/typst-compiler`
+    are now one package, `@typdf/pdf`, with the same API: `PdfRenderer`,
+    `htmlToPdf`, `createTemplates`, `memorySource`, `SidecarBackend`,
+    `CliBackend`, the errors and the types all import from `@typdf/pdf`. The
+    compiler's `PagesResult` type is exported as `CompilePagesResult`.
+  - `@gjeria/html-to-typst` is now `@typdf/html-to-typst`.
+  - The CLI is now `typdf` (`npx typdf dev`, `typdf check --strict`).
+  - The prebuilt binaries are `@typdf/sidecar-<platform>-<arch>`, installed
+    automatically.
+
+### Patch Changes
+
+- Updated dependencies
+  - @typdf/html-to-typst@0.3.0
+
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies
+  - @gjeria/html-to-typst@0.2.4
+  - @gjeria/typst-compiler@0.2.4
 
 ## 0.2.3
 

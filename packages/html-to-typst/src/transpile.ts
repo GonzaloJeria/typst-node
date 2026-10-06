@@ -166,7 +166,7 @@ function resolveRuns(
       const page = b.name ? setupOf(b.name) : undefined;
       return [{ ...b, ...(page ? { page } : {}), children }];
     }
-    if (b.kind === "box" || b.kind === "styled-block" || b.kind === "place" || b.kind === "transform" || b.kind === "pad" || b.kind === "columns") {
+    if (b.kind === "box" || b.kind === "styled-block" || b.kind === "keep" || b.kind === "place" || b.kind === "transform" || b.kind === "pad" || b.kind === "columns") {
       b.children = resolveRuns(b.children, false, setupOf, warnings);
     }
     if (b.kind === "list") b.items = b.items.map((i) => resolveRuns(i, false, setupOf, warnings));

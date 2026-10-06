@@ -212,6 +212,11 @@ export type Block =
       margins?: Margins;
     }
   | { kind: "box"; style: BoxStyle; children: Block[] }
+  /**
+   * `break-before: avoid` right after a table: the content is kept on the
+   * page of the table's last rows, carrying some of them along if needed.
+   */
+  | { kind: "keep"; children: Block[] }
   | { kind: "styled-block"; style: TextStyle; children: Block[] }
   | {
       kind: "table";
@@ -220,6 +225,10 @@ export type Block =
       header?: TableRow[];
       body: TableRow[];
       footer?: TableRow[];
+      /** CSS `widows`: body rows that travel with a `keep` block that follows. */
+      widows?: number;
+      /** Rows of the last `<tbody>` when there are several: a group kept whole. */
+      lastGroup?: number;
       /** Per-cell stroke: one for all sides, or per side (e.g. only bottom rules). */
       stroke?: Stroke | Sides<Stroke> | null;
       inset?: Length | Sides<Length>;

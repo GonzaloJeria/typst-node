@@ -35,7 +35,7 @@ for (const dir of dirs) {
   // Platform packages for other systems cannot be installed here; skip their binaries.
   if (pkg.os && !pkg.os.includes(process.platform)) continue;
   if (pkg.cpu && !pkg.cpu.includes(process.arch)) continue;
-  if (pkg.bin && pkg.name.includes("typst-sidecar-") && !Object.values(pkg.bin ?? {}).every((b) => existsSync(path.join(dir, b)))) continue;
+  if (pkg.bin && pkg.name.includes("/sidecar-") && !Object.values(pkg.bin ?? {}).every((b) => existsSync(path.join(dir, b)))) continue;
   const out = run("pnpm", ["pack", "--pack-destination", packs], dir).trim().split("\n").at(-1);
   tarballs[pkg.name] = `file:${path.isAbsolute(out) ? out : path.join(packs, path.basename(out))}`;
 }
@@ -47,8 +47,8 @@ writeFileSync(
     {
       name: "smoke",
       private: true,
-      dependencies: { "@gjeria/pdf-templates": tarballs["@gjeria/pdf-templates"], "@gjeria/typst-html-pdf": tarballs["@gjeria/typst-html-pdf"] },
-      // Every @gjeria dependency resolves to the local tarball, not the registry.
+      dependencies: { "@typdf/pdf": tarballs["@typdf/pdf"] },
+      // Every @typdf dependency resolves to the local tarball, not the registry.
       overrides: tarballs,
     },
     null,
@@ -65,17 +65,17 @@ const check = (name, ok) => {
 // ESM: templates with Tailwind and the base renderer.
 writeFileSync(
   path.join(app, "esm.mjs"),
-  `import { createTemplates } from "@gjeria/pdf-templates";
-import { htmlToPdf, disposeDefaultRenderer } from "@gjeria/typst-html-pdf";
+  `import { createTemplates, htmlToPdf, disposeDefaultRenderer } from "@typdf/pdf";
 const t = createTemplates();
 const r = await t.render({ html: '<h1 class="text-2xl font-bold text-indigo-600">{{titulo}}</h1><p class="lg:p-4">x</p>' }, { titulo: "Hola" });
 const base = await htmlToPdf('<p class="p-4 bg-zinc-100">x</p>', { tailwind: true });
-const { PdfRenderer } = await import("@gjeria/typst-html-pdf");
+const { PdfRenderer, SidecarBackend, CliBackend, TypstQueueFullError } = await import("@typdf/pdf");
+const compiler = [SidecarBackend, CliBackend, TypstQueueFullError].every((x) => typeof x === "function");
 const threaded = new PdfRenderer({ transpileWorkers: 1 });
 const w = await threaded.render('<p class="p-4">x</p>', { tailwind: true });
 const workers = threaded.stats()?.transpileWorkers;
 await threaded.dispose();
-console.log(JSON.stringify({ pdf: Buffer.from(r.pdf.slice(0, 5)).toString(), tw: r.css.includes(".text-indigo-600"), warn: r.warnings.length, base: base.pdf.length > 0, worker: w.pdf.length > 0 && workers === 1 }));
+console.log(JSON.stringify({ pdf: Buffer.from(r.pdf.slice(0, 5)).toString(), tw: r.css.includes(".text-indigo-600"), warn: r.warnings.length, base: base.pdf.length > 0, worker: w.pdf.length > 0 && workers === 1, compiler }));
 await t.dispose();
 await disposeDefaultRenderer();
 `,
@@ -84,12 +84,12 @@ const esm = JSON.parse(run("node", ["esm.mjs"], app));
 check("ESM import, Handlebars, bundled Tailwind, PDF output", esm.pdf === "%PDF-" && esm.tw && esm.base);
 check("Tailwind warnings reach the result", esm.warn === 1);
 check("ESM transpile worker thread", esm.worker);
+check("Compiler backends exported from the main entry", esm.compiler);
 
 // CommonJS.
 writeFileSync(
   path.join(app, "cjs.cjs"),
-  `const { PdfRenderer } = require("@gjeria/typst-html-pdf");
-const { createTemplates } = require("@gjeria/pdf-templates");
+  `const { PdfRenderer, createTemplates } = require("@typdf/pdf");
 (async () => {
   const renderer = new PdfRenderer({ transpileWorkers: 1 });
   const r = await renderer.render('<p class="text-red-600">x</p>', { tailwind: true });
@@ -107,7 +107,7 @@ check("CommonJS transpile worker thread", cjs.worker);
 console.log(`  backend: ${cjs.backend}`);
 
 // CLI.
-const bin = path.join(app, "node_modules", ".bin", isWin ? "typst-pdf.cmd" : "typst-pdf");
+const bin = path.join(app, "node_modules", ".bin", isWin ? "typdf.cmd" : "typdf");
 run(bin, ["new", "factura"], app);
 run(bin, ["render", "factura", "--out", "factura.pdf"], app);
 check("CLI new + render", readFileSync(path.join(app, "factura.pdf")).subarray(0, 5).toString() === "%PDF-");

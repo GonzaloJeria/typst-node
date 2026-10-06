@@ -7,6 +7,7 @@ import { expandBox, parseColor, parseFontSize, parseNumber, splitValue } from ".
 
 /** Properties that inherit from the parent when not set (custom properties always do). */
 const INHERITED = new Set([
+  "widows",
   "color", "font-family", "font-weight", "font-style", "text-align", "line-height",
   "letter-spacing", "white-space", "list-style-type", "visibility", "text-transform",
   "font-variant-numeric", "text-indent",

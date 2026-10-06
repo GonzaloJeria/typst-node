@@ -1,7 +1,7 @@
 name: Tag release
 
 # Creates and pushes the git tags for the current package versions
-# (`@gjeria/<package>@<version>`) without building or publishing. Use it when
+# (`@typdf/<package>@<version>`) without building or publishing. Use it when
 # a Release run published to npm but could not push its tags. With `ref`,
 # tags the versions found at that commit (an older release).
 on:
@@ -33,5 +33,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           pnpm changeset tag
-          git tag -l '@gjeria/*'
+          git tag -l '@typdf/*'
           git push origin --tags

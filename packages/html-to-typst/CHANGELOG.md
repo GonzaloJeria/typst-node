@@ -1,4 +1,30 @@
-# @gjeria/html-to-typst
+# @typdf/html-to-typst
+
+## 0.3.0
+
+### Minor Changes
+
+- New name: the packages move to the `@typdf` npm organization.
+
+  - `@gjeria/typst-html-pdf`, `@gjeria/pdf-templates` and `@gjeria/typst-compiler`
+    are now one package, `@typdf/pdf`, with the same API: `PdfRenderer`,
+    `htmlToPdf`, `createTemplates`, `memorySource`, `SidecarBackend`,
+    `CliBackend`, the errors and the types all import from `@typdf/pdf`. The
+    compiler's `PagesResult` type is exported as `CompilePagesResult`.
+  - `@gjeria/html-to-typst` is now `@typdf/html-to-typst`.
+  - The CLI is now `typdf` (`npx typdf dev`, `typdf check --strict`).
+  - The prebuilt binaries are `@typdf/sidecar-<platform>-<arch>`, installed
+    automatically.
+
+## 0.2.4
+
+### Patch Changes
+
+- `break-before: avoid` after a table: the block (totals, signature) no longer
+  starts a page on its own. When it does not fit after the table, it takes the
+  table's last rows along (CSS `widows`, 2 by default, plus the last `<tbody>`
+  when there are several), and the carried rows repeat the table header, as
+  print engines like Prince do.
 
 ## 0.2.3
 

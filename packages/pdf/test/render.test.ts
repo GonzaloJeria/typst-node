@@ -66,6 +66,23 @@ describe.skipIf(!hasTypst)("PdfRenderer", () => {
     expect(r.pages).toHaveLength(2);
   });
 
+  it("converges when a break-before: avoid block carries the table's last rows", async () => {
+    const pageCounts: number[] = [];
+    for (let n = 3; n <= 24; n++) {
+      const rows = Array.from({ length: n }, (_, i) => `<tr><td>fila ${i}</td><td>$${i}</td></tr>`).join("");
+      const html = `<style>@page { size: 300px 300px; margin: 10px }</style>
+        <table style="width: 100%; border: 1px solid"><thead><tr><th>Item</th><th>Monto</th></tr></thead><tbody>${rows}</tbody>
+        <tbody><tr><td>Total</td><td>$1</td></tr></tbody></table>
+        <div style="break-before: avoid; break-inside: avoid; height: 80px">firma</div>`;
+      const r = await renderer.renderPages(html, { ppi: 10 });
+      expect(r.diagnostics, `${n} rows`).toEqual([]);
+      pageCounts.push(r.pages.length);
+    }
+    // More rows never take fewer pages.
+    expect(pageCounts).toEqual([...pageCounts].sort((a, b) => a - b));
+    expect(pageCounts.at(-1)).toBeGreaterThan(1);
+  });
+
   it("does not dispose a borrowed backend", async () => {
     const borrowed = new PdfRenderer({ backend: renderer.backend });
     await borrowed.dispose();

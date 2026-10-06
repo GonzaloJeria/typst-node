@@ -30,15 +30,15 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)
 
-  npm/typst-sidecar-darwin-arm64: {}
+  npm/sidecar-darwin-arm64: {}
 
-  npm/typst-sidecar-darwin-x64: {}
+  npm/sidecar-darwin-x64: {}
 
-  npm/typst-sidecar-linux-arm64: {}
+  npm/sidecar-linux-arm64: {}
 
-  npm/typst-sidecar-linux-x64: {}
+  npm/sidecar-linux-x64: {}
 
-  npm/typst-sidecar-win32-x64: {}
+  npm/sidecar-win32-x64: {}
 
   packages/html-to-typst:
     dependencies:
@@ -48,12 +48,12 @@ importers:
 
   packages/pdf:
     dependencies:
-      '@gjeria/html-to-typst':
+      '@typdf/html-to-typst':
         specifier: workspace:^
         version: link:../html-to-typst
-      '@gjeria/typst-compiler':
-        specifier: workspace:^
-        version: link:../typst-compiler
+      handlebars:
+        specifier: ^4.7.8
+        version: 4.7.9
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
@@ -61,33 +61,22 @@ importers:
       parse5:
         specifier: ^8.0.1
         version: 8.0.1
-
-  packages/templates:
-    dependencies:
-      '@gjeria/typst-html-pdf':
-        specifier: workspace:^
-        version: link:../pdf
-      handlebars:
-        specifier: ^4.7.8
-        version: 4.7.9
-
-  packages/typst-compiler:
     optionalDependencies:
-      '@gjeria/typst-sidecar-darwin-arm64':
+      '@typdf/sidecar-darwin-arm64':
         specifier: workspace:*
-        version: link:../../npm/typst-sidecar-darwin-arm64
-      '@gjeria/typst-sidecar-darwin-x64':
+        version: link:../../npm/sidecar-darwin-arm64
+      '@typdf/sidecar-darwin-x64':
         specifier: workspace:*
-        version: link:../../npm/typst-sidecar-darwin-x64
-      '@gjeria/typst-sidecar-linux-arm64':
+        version: link:../../npm/sidecar-darwin-x64
+      '@typdf/sidecar-linux-arm64':
         specifier: workspace:*
-        version: link:../../npm/typst-sidecar-linux-arm64
-      '@gjeria/typst-sidecar-linux-x64':
+        version: link:../../npm/sidecar-linux-arm64
+      '@typdf/sidecar-linux-x64':
         specifier: workspace:*
-        version: link:../../npm/typst-sidecar-linux-x64
-      '@gjeria/typst-sidecar-win32-x64':
+        version: link:../../npm/sidecar-linux-x64
+      '@typdf/sidecar-win32-x64':
         specifier: workspace:*
-        version: link:../../npm/typst-sidecar-win32-x64
+        version: link:../../npm/sidecar-win32-x64
 
 packages:
 

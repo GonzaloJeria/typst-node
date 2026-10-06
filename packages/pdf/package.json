@@ -1,15 +1,17 @@
 {
-  "name": "@gjeria/typst-html-pdf",
-  "version": "0.2.3",
-  "description": "HTML/CSS to PDF in Node.js without Chromium, powered by Typst.",
+  "name": "@typdf/pdf",
+  "version": "0.3.0",
+  "description": "HTML/CSS and Handlebars + Tailwind templates to PDF in Node.js without Chromium, powered by Typst. CLI with live preview.",
   "keywords": [
     "pdf",
     "html-to-pdf",
     "typst",
     "puppeteer-alternative",
+    "templates",
+    "handlebars",
+    "tailwind",
     "invoice",
-    "report",
-    "tailwind"
+    "report"
   ],
   "author": "Gonzalo Jeria (https://github.com/GonzaloJeria)",
   "type": "module",
@@ -28,6 +30,9 @@
     "README.md",
     "LICENSE"
   ],
+  "bin": {
+    "typdf": "./dist/cli.js"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -48,17 +53,24 @@
     "node": ">=20.19"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsup",
     "typecheck": "tsc -p tsconfig.json",
     "bench": "node bench.mjs"
   },
   "dependencies": {
-    "@gjeria/html-to-typst": "workspace:^",
-    "@gjeria/typst-compiler": "workspace:^",
+    "@typdf/html-to-typst": "workspace:^",
+    "handlebars": "^4.7.8",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "parse5": "^8.0.1"
+  },
+  "optionalDependencies": {
+    "@typdf/sidecar-linux-x64": "workspace:*",
+    "@typdf/sidecar-linux-arm64": "workspace:*",
+    "@typdf/sidecar-darwin-x64": "workspace:*",
+    "@typdf/sidecar-darwin-arm64": "workspace:*",
+    "@typdf/sidecar-win32-x64": "workspace:*"
   },
   "publishConfig": {
     "access": "public",
