@@ -1,14 +1,17 @@
-# typst-node
+# typdf
 
 Generación de PDF en Node.js sin navegador: HTML/CSS → Typst → PDF.
 
-| Paquete | Estado |
+```sh
+npm i @typdf/pdf
+```
+
+| Paquete | Qué es |
 |---|---|
-| [`@gjeria/typst-compiler`](packages/typst-compiler) | `TypstBackend` + `CliBackend` (binario oficial de Typst por documento) + `SidecarBackend` (procesos Typst persistentes); cero dependencias de runtime |
-| [`@gjeria/pdf-templates`](packages/templates) | Templates Handlebars + Tailwind desde archivos o base de datos, Google Fonts, y la CLI `typst-pdf` con vista previa en vivo |
-| [`@gjeria/typst-html-pdf`](packages/pdf) | Fachada `htmlToPdf()` / `PdfRenderer`: transpila, resuelve imágenes (data URI, archivos locales acotados a `baseDir`, HTTP con protección SSRF) y compila |
+| [`@typdf/pdf`](packages/pdf) | **Lo que instalas.** `htmlToPdf()` / `PdfRenderer` (transpila, resuelve imágenes —data URI, archivos locales acotados a `baseDir`, HTTP con protección SSRF— y compila); templates Handlebars + Tailwind desde archivos o base de datos (`createTemplates`), Google Fonts y la CLI `typdf` con vista previa en vivo; y el compilador: `CliBackend` (binario oficial de Typst por documento) y `SidecarBackend` (procesos Typst persistentes) |
+| `@typdf/sidecar-<plataforma>-<arquitectura>` | El binario `typst-sidecar` de cada plataforma. npm instala solo el tuyo, como dependencia opcional de `@typdf/pdf`; no se instala a mano |
 | [`typst-sidecar`](crates/typst-sidecar) | Binario Rust propio sobre los crates oficiales de Typst: compila por JSON sobre stdin/stdout sin reiniciar entre documentos |
-| [`@gjeria/html-to-typst`](packages/html-to-typst) | HTML/CSS → IR → Typst: parse5, cascada CSS propia (selectores, especificidad, herencia, shorthands, `@page`, `@media print`), tablas con rowspan/colspan, flex/grid básicos, saltos de página |
+| [`@typdf/html-to-typst`](packages/html-to-typst) | HTML/CSS → IR → Typst: parse5, cascada CSS propia (selectores, especificidad, herencia, shorthands, `@page`, `@media print`), tablas con rowspan/colspan, flex/grid básicos, saltos de página |
 
 ## Por qué Tailwind
 
@@ -71,19 +74,19 @@ pnpm build       # tsup → ESM + CJS + .d.ts
 ## Uso
 
 Con templates (Handlebars + Tailwind, desde archivos o base de datos), usa
-[`@gjeria/pdf-templates`](packages/templates):
+`createTemplates`:
 
 ```ts
-import { createTemplates } from "@gjeria/pdf-templates";
+import { createTemplates } from "@typdf/pdf";
 
 const templates = createTemplates({ source: async (nombre) => db.plantillas.findOne({ nombre }) });
 const { pdf, warnings } = await templates.render("factura", datos);
 ```
 
-Con HTML que ya generas tú, la librería base:
+Con HTML que ya generas tú, `PdfRenderer`:
 
 ```ts
-import { PdfRenderer } from "@gjeria/typst-html-pdf";
+import { PdfRenderer } from "@typdf/pdf";
 
 const renderer = new PdfRenderer({
   defaults: {
@@ -117,7 +120,7 @@ sidecar se reinicia solo si se cae, si excede el timeout o cada
 (`@preview/…`), que el transpilador no usa.
 
 En el repo, `pnpm sidecar:build` compila el binario para la máquina local y lo
-deja en `npm/typst-sidecar-<plataforma>-<arquitectura>/bin`, donde lo encuentra
+deja en `npm/sidecar-<plataforma>-<arquitectura>/bin`, donde lo encuentra
 igual que en una instalación de npm (en Linux necesita `musl-tools` y
 `CC_x86_64_unknown_linux_musl=musl-gcc`). `TYPST_SIDECAR_PATH` permite usar otro binario.
 
@@ -173,14 +176,14 @@ Lo mismo se puede hacer en un solo HTML con CSS estándar de páginas con nombre
 ### Otros paquetes
 
 ```ts
-import { htmlToTypst } from "@gjeria/html-to-typst";
+import { htmlToTypst } from "@typdf/html-to-typst";
 
 const { source, warnings, assets } = htmlToTypst(html);
 // assets: rutas de <img> para resolver y pasar como `files` al compilador
 ```
 
 ```ts
-import { CliBackend } from "@gjeria/typst-compiler";
+import { CliBackend } from "@typdf/pdf";
 
 const typst = new CliBackend({ maxConcurrency: 4, timeoutMs: 10_000 });
 await typst.verify(); // falla pronto si no hay binario
@@ -196,23 +199,23 @@ const { pdf, warnings } = await typst.compile({
 ## Guía de uso y buenas prácticas
 
 **¿Generas PDFs desde templates?** (HTML con variables, guardado en archivos o
-en la base de datos). Usa [`@gjeria/pdf-templates`](packages/templates): se
+en la base de datos). Usa `createTemplates`: se
 encarga de Handlebars, Tailwind, Google Fonts y los `<script>`/`<link>` del
 HTML, y trae la vista previa en vivo:
 
 ```sh
-npm i @gjeria/pdf-templates
-npx typst-pdf new factura && npx typst-pdf dev
+npm i @typdf/pdf
+npx typdf new factura && npx typdf dev
 ```
 
 ```ts
-import { createTemplates } from "@gjeria/pdf-templates";
+import { createTemplates } from "@typdf/pdf";
 
 const templates = createTemplates({ source: async (nombre) => db.plantillas.findOne({ nombre }) });
 const { pdf } = await templates.render("orden-de-compra", datos);
 ```
 
-Lo que sigue describe la librería base, `@gjeria/typst-html-pdf`. Las reglas
+Lo que sigue describe `PdfRenderer`, que también usan los templates por dentro. Las reglas
 básicas:
 
 1. **Un `PdfRenderer` por proceso**, creado al arrancar, nunca uno por
@@ -220,7 +223,7 @@ básicas:
 2. **`await renderer.warmup()`** antes de aceptar tráfico, para que el primer
    PDF no pague el arranque.
 3. **`renderer.dispose()`** al apagar (`SIGTERM`), para cerrar los procesos.
-4. **Usa Tailwind** (`tailwind: true`; en `pdf-templates` ya viene activado).
+4. **Usa Tailwind** (`tailwind: true`; en los templates ya viene activado).
    Da el resultado más fiel a Chrome y avisa de las clases que no sirven (ver
    [Por qué Tailwind](#por-qué-tailwind)). Si necesitas CSS propio, va en
    `@theme`/`@utility`, en un `<style>` o en la opción `css`: la librería no
@@ -328,8 +331,8 @@ O con secciones (ver [Plantillas y secciones](#plantillas-y-secciones)), que
 además permiten portada sin encabezado y CSS distinto por parte.
 
 **Tailwind CSS v4 (la forma recomendada).** Viene incluido: no hay nada que instalar.
-Con `@gjeria/pdf-templates` está activado por defecto; con la librería base
-se activa con `tailwind: true`:
+En los templates (`createTemplates`) está activado por defecto; con
+`PdfRenderer` se activa con `tailwind: true`:
 
 ```ts
 const html = `<div class="p-8 text-slate-800"><h1 class="text-2xl font-bold text-blue-600">Factura</h1></div>`;
@@ -419,7 +422,7 @@ res.end(Buffer.from(pdf));
 
 | En el navegador | Aquí |
 |---|---|
-| `<script>`, CDN de Tailwind | `tailwind: true` (o `@gjeria/pdf-templates`) |
+| `<script>`, CDN de Tailwind | `tailwind: true` (o `createTemplates`) |
 | `<link rel="stylesheet">` | leer el archivo y pasarlo en `<style>` o `css` |
 | formularios, video, canvas, iframe | se omiten con warning; usa texto o imágenes |
 | `:hover`, modo oscuro | nunca aplican en papel |
@@ -430,12 +433,12 @@ Ver [Soporte de HTML/CSS](#soporte-de-htmlcss) para el detalle.
 
 ## Migrar desde Puppeteer o Playwright
 
-| Puppeteer / Playwright | typst-node |
+| Puppeteer / Playwright | typdf |
 |---|---|
 | `browser.newPage()` + `page.setContent(html)` + `page.pdf()` | `renderer.render(html)` (un `PdfRenderer` por proceso) |
 | `page.pdf({ format: "A4", margin })` | `@page { size: A4; margin: 15mm }` en el CSS, o `page` en secciones/templates |
 | `displayHeaderFooter`, `headerTemplate`, `footerTemplate` | `page.header` / `page.footer` (con `{{page}}` y `{{pages}}`), o `@top-center`/`@bottom-center` |
-| `<script src="https://cdn.tailwindcss.com">` | `tailwind: true` (incluido) o `@gjeria/pdf-templates` |
+| `<script src="https://cdn.tailwindcss.com">` | `tailwind: true` (incluido) o `createTemplates` |
 | `<link rel="stylesheet" href="…">` | el CSS en `<style>`, la opción `css`, o una hoja local en un template |
 | `printBackground: true` | siempre activo |
 | `page.waitForNetworkIdle()` / imágenes remotas | `assets: { allowRemote: true, allowedHosts: [...] }` (se descargan antes de compilar) |
@@ -449,16 +452,16 @@ Diferencias a tener en cuenta:
 - **No hay JavaScript.** Lo que en el navegador calcula un script (totales,
   gráficos con Chart.js) se calcula antes, en Node.
 - **Fuentes:** `sans-serif` es Inter (incluida); las demás se declaran con
-  `@font-face` (TTF/OTF) o con un `<link>` a Google Fonts en
-  `@gjeria/pdf-templates`.
+  `@font-face` (TTF/OTF) o con un `<link>` a Google Fonts en los templates
+  (`createTemplates`).
 - **Revisa `warnings`:** lista todo lo que no se pudo representar, en vez de
   fallar en silencio.
 
 ## En producción
 
-Una aplicación solo instala `@gjeria/typst-html-pdf`. El motor viene incluido:
-`@gjeria/typst-compiler` declara como dependencias opcionales los paquetes
-`@gjeria/typst-sidecar-<plataforma>-<arquitectura>` (Linux x64/arm64 estático,
+Una aplicación solo instala `@typdf/pdf`. El motor viene incluido:
+`@typdf/pdf` declara como dependencias opcionales los paquetes
+`@typdf/sidecar-<plataforma>-<arquitectura>` (Linux x64/arm64 estático,
 macOS x64/arm64, Windows x64) y npm instala solo el que corresponde, como hace
 esbuild. Sin Chromium, sin instalar Typst, sin paquetes del sistema.
 
@@ -473,7 +476,7 @@ CMD ["node", "dist/server.js"]
 ```
 
 ```ts
-import { PdfRenderer, TypstCompileError } from "@gjeria/typst-html-pdf";
+import { PdfRenderer, TypstCompileError } from "@typdf/pdf";
 
 // Uno por proceso de Node, creado al arrancar.
 const renderer = new PdfRenderer({
@@ -514,7 +517,7 @@ decisiones de infraestructura (logger, métricas, caché, endpoints).
 en memoria. Con `maxQueue` el exceso se rechaza de inmediato:
 
 ```ts
-import { PdfRenderer, TypstQueueFullError } from "@gjeria/typst-html-pdf";
+import { PdfRenderer, TypstQueueFullError } from "@typdf/pdf";
 
 const renderer = new PdfRenderer({ sidecar: { processes: 2, maxQueue: 50 } });
 
@@ -572,7 +575,7 @@ const renderer = new PdfRenderer({
 ### Fuentes incluidas
 
 `sans-serif` y `system-ui` usan **Inter** (Regular, Italic, Bold, Bold Italic;
-SIL OFL), incluida en `@gjeria/typst-html-pdf` (1,4 MB). `serif` usa Libertinus
+SIL OFL), incluida en `@typdf/pdf` (1,4 MB). `serif` usa Libertinus
 Serif y `monospace` DejaVu Sans Mono, que vienen dentro de Typst. Un
 `font-family: Arial, sans-serif` cae en Inter si Arial no está instalada. El
 renderer agrega las fuentes solo; si creas tu propio backend, pásale
@@ -648,7 +651,7 @@ gcloud run deploy pdf --source . \
 ## Typst contra Puppeteer
 
 Benchmark independiente, hecho por un equipo que migró un microservicio de
-liquidaciones de Puppeteer a `@gjeria/typst-html-pdf` 0.2.3.
+liquidaciones de Puppeteer a `@gjeria/typst-html-pdf` 0.2.3 (hoy `@typdf/pdf`).
 
 **Cómo se midió:**
 - Máquina arm64 de 4 núcleos; la misma plantilla HTML + Tailwind en los dos motores.
@@ -700,16 +703,38 @@ la CPU por PDF del benchmark en arm64, calcula entre **8 y 25 PDF/s** para
 documentos de 50 filas y entre **3 y 6 PDF/s** para 300 filas. Mide en tu propia
 instancia antes de dimensionar.
 
+## Migrar desde `@gjeria/*`
+
+Hasta la 0.2.x los paquetes se publicaban como `@gjeria/typst-html-pdf`,
+`@gjeria/pdf-templates`, `@gjeria/typst-compiler` y `@gjeria/html-to-typst`.
+Desde la 0.3.0 los tres primeros son uno solo, `@typdf/pdf`, con la misma API:
+
+```sh
+npm uninstall @gjeria/typst-html-pdf @gjeria/pdf-templates @gjeria/typst-compiler
+npm i @typdf/pdf
+```
+
+| Antes | Ahora |
+|---|---|
+| `import { PdfRenderer, htmlToPdf } from "@gjeria/typst-html-pdf"` | `import { PdfRenderer, htmlToPdf } from "@typdf/pdf"` |
+| `import { createTemplates, memorySource } from "@gjeria/pdf-templates"` | `import { createTemplates, memorySource } from "@typdf/pdf"` |
+| `import { SidecarBackend, CliBackend } from "@gjeria/typst-compiler"` | `import { SidecarBackend, CliBackend } from "@typdf/pdf"` |
+| `import { htmlToTypst } from "@gjeria/html-to-typst"` | `import { htmlToTypst } from "@typdf/html-to-typst"` |
+| `npx typst-pdf dev` | `npx typdf dev` |
+
+El tipo `PagesResult` del compilador se exporta como `CompilePagesResult`
+(`PagesResult` sigue siendo el de `renderPages()`).
+
 ## Publicar en npm
 
 Las versiones y los CHANGELOG salen de `.changeset/` (`pnpm changeset` para
 registrar un cambio, `pnpm changeset version` para aplicar los pendientes; todos
-los paquetes `@gjeria/*` comparten versión).
+los paquetes `@typdf/*` comparten versión).
 
 La publicación la hace el workflow **Release** (Actions → Release → Run
 workflow): compila `typst-sidecar` para las 5 plataformas, corre los tests y
 publica con provenance todo lo que no esté en npm. Requiere el secreto
-`NPM_TOKEN` (token *Automation* de npm con acceso al scope `@gjeria`). Publicar
+`NPM_TOKEN` (token *Automation* de npm con acceso a la organización `@typdf`). Publicar
 desde una máquina local no sirve: los paquetes de plataforma se negarían a
 publicarse sin su binario.
 

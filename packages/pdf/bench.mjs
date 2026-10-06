@@ -2,8 +2,8 @@
 // Run `pnpm build` first; the sidecar runs when TYPST_SIDECAR_PATH is set or
 // crates/typst-sidecar has been built (`cargo build --release`).
 import { existsSync, readFileSync } from "node:fs";
-import { htmlToTypst } from "@gjeria/html-to-typst";
-import { CliBackend, SidecarBackend } from "@gjeria/typst-compiler";
+import { htmlToTypst } from "@typdf/html-to-typst";
+import { CliBackend, SidecarBackend } from "./dist/index.js";
 import { PdfRenderer } from "./dist/index.js";
 
 const F = "test/fixtures/";

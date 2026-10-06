@@ -1,12 +1,12 @@
 name: Release
 
 # Builds typst-sidecar for every platform package in npm/, then publishes all
-# @gjeria packages whose version is not on npm yet (changeset publish).
+# @typdf packages whose version is not on npm yet (changeset publish).
 # Linux and Windows binaries are cross-compiled on one Linux runner
 # (cargo-zigbuild); both macOS binaries come from a single macOS runner,
 # which needs Apple's SDK to link. macOS runners bill 10x the minutes.
 # Run it from the Actions tab after merging a "changeset version" commit.
-# Requires the NPM_TOKEN secret (an npm automation token for the @gjeria scope).
+# Requires the NPM_TOKEN secret (an npm automation token for the @typdf scope).
 on:
   workflow_dispatch:
 
@@ -25,12 +25,12 @@ jobs:
       - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Build both macOS binaries
         run: |
-          SIDECAR_PKG=typst-sidecar-darwin-arm64 node scripts/build-sidecar.mjs
-          SIDECAR_PKG=typst-sidecar-darwin-x64 node scripts/build-sidecar.mjs
+          SIDECAR_PKG=sidecar-darwin-arm64 node scripts/build-sidecar.mjs
+          SIDECAR_PKG=sidecar-darwin-x64 node scripts/build-sidecar.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: macos-binaries
-          path: npm/typst-sidecar-darwin-*/bin/
+          path: npm/sidecar-darwin-*/bin/
           if-no-files-found: error
 
   release:
@@ -52,7 +52,7 @@ jobs:
       - name: Build the Linux and Windows binaries
         run: |
           for pkg in linux-x64 linux-arm64 win32-x64; do
-            SIDECAR_PKG=typst-sidecar-$pkg SIDECAR_CARGO=zigbuild node scripts/build-sidecar.mjs
+            SIDECAR_PKG=sidecar-$pkg SIDECAR_CARGO=zigbuild node scripts/build-sidecar.mjs
           done
       - uses: actions/download-artifact@v4
         with:
@@ -81,5 +81,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           pnpm changeset tag
-          git tag -l '@gjeria/*'
+          git tag -l '@typdf/*'
           git push origin --tags

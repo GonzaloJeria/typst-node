@@ -21,7 +21,7 @@ const DEFAULT_GENERICS: NonNullable<ConvertOptions["genericFamilies"]> = {
   // Fonts embedded in the official Typst binary.
   serif: ["Libertinus Serif"],
   monospace: ["DejaVu Sans Mono"],
-  // Bundled with @gjeria/typst-html-pdf (see `bundledFontsDir`).
+  // Bundled with @typdf/pdf (see `bundledFontsDir`).
   "sans-serif": ["Inter"],
   "system-ui": ["Inter"],
 };

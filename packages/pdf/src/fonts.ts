@@ -1,4 +1,4 @@
-import type { FontFace } from "@gjeria/html-to-typst";
+import type { FontFace } from "@typdf/html-to-typst";
 import { loadOne, type AssetOptions } from "./assets.js";
 
 export interface ResolvedFonts {

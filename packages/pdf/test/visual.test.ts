@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { documentText, htmlToTypst } from "@gjeria/html-to-typst";
+import { documentText, htmlToTypst } from "@typdf/html-to-typst";
 import { parse } from "parse5";
 import { afterAll, describe, expect, it } from "vitest";
 import { PdfRenderer } from "../src/index.js";

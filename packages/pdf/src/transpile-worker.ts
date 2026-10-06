@@ -4,7 +4,7 @@
  * convert in parallel. See `TranspilePool`.
  */
 import { parentPort } from "node:worker_threads";
-import { composeToTypst, htmlToTypst, type ComposeInput, type TranspileOptions } from "@gjeria/html-to-typst";
+import { composeToTypst, htmlToTypst, type ComposeInput, type TranspileOptions } from "@typdf/html-to-typst";
 
 export interface TranspileJob {
   id: number;

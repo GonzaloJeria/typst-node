@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import { composeToTypst, htmlToTypst, TranspileError, type ComposeInput, type TranspileOptions, type TranspileResult } from "@gjeria/html-to-typst";
+import { composeToTypst, htmlToTypst, TranspileError, type ComposeInput, type TranspileOptions, type TranspileResult } from "@typdf/html-to-typst";
 
 /** What the renderer needs from a conversion (the Typst source is emitted later, once images are mapped). */
 export type Transpiled = Omit<TranspileResult, "source">;

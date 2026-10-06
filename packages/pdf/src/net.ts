@@ -51,7 +51,7 @@ function request(url: URL, limits: FetchLimits): Promise<{ redirect?: string; bo
       {
         timeout: limits.timeoutMs,
         signal: limits.signal,
-        headers: { accept: "image/*", "user-agent": "typst-html-pdf" },
+        headers: { accept: "image/*", "user-agent": "typdf" },
         lookup: (hostname, options, callback) => {
           dnsLookup(hostname, { ...options, all: true }, (err, addresses: LookupAddress[]) => {
             if (err) return callback(err, "", 0);

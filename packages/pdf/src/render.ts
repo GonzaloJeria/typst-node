@@ -1,4 +1,4 @@
-import { mapImages, emitDocument, type ComposeInput, type TranspileOptions } from "@gjeria/html-to-typst";
+import { mapImages, emitDocument, type ComposeInput, type TranspileOptions } from "@typdf/html-to-typst";
 import {
   CliBackend,
   SidecarBackend,
@@ -10,7 +10,7 @@ import {
   type FontSource,
   type PageFormat,
   type TypstBackend,
-} from "@gjeria/typst-compiler";
+} from "./compiler/index.js";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { resolveFonts } from "./fonts.js";
