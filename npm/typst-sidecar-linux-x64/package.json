@@ -1,6 +1,6 @@
 {
   "name": "@gjeria/typst-sidecar-linux-x64",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "typst-sidecar binary for linux-x64 (x86_64-unknown-linux-musl), used by @gjeria/typst-compiler.",
   "author": "Gonzalo Jeria (https://github.com/GonzaloJeria)",
   "license": "MIT",

@@ -1,5 +1,11 @@
 # @gjeria/pdf-templates
 
+## 0.2.4
+
+### Patch Changes
+
+- @gjeria/typst-html-pdf@0.2.4
+
 ## 0.2.3
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @gjeria/html-to-typst
 
+## 0.2.4
+
+### Patch Changes
+
+- `break-before: avoid` after a table: the block (totals, signature) no longer
+  starts a page on its own. When it does not fit after the table, it takes the
+  table's last rows along (CSS `widows`, 2 by default, plus the last `<tbody>`
+  when there are several), and the carried rows repeat the table header, as
+  print engines like Prince do.
+
 ## 0.2.3
 
 ### Patch Changes

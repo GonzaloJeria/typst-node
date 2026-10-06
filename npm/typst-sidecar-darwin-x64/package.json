@@ -1,6 +1,6 @@
 {
   "name": "@gjeria/typst-sidecar-darwin-x64",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "typst-sidecar binary for darwin-x64 (x86_64-apple-darwin), used by @gjeria/typst-compiler.",
   "author": "Gonzalo Jeria (https://github.com/GonzaloJeria)",
   "license": "MIT",

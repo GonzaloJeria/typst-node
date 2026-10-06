@@ -1,5 +1,13 @@
 # @gjeria/typst-html-pdf
 
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies
+  - @gjeria/html-to-typst@0.2.4
+  - @gjeria/typst-compiler@0.2.4
+
 ## 0.2.3
 
 ### Patch Changes
